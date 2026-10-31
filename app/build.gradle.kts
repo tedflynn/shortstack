@@ -15,11 +15,11 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.vivificavit.bodad"
+    namespace = "com.vivificavit.shortstack"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.vivificavit.bodad"
+        applicationId = "com.vivificavit.shortstack"
         minSdk = 26
         targetSdk = 37
         // Raise versionCode by 1 for every upload to Play.

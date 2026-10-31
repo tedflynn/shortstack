@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "bodad"
+rootProject.name = "shortstack"
 include(":app")
