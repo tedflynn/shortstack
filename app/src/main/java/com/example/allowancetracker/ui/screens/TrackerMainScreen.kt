@@ -61,9 +61,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -73,11 +72,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -89,6 +88,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.allowancetracker.data.local.CategorySum
 import com.example.allowancetracker.data.model.Transaction
 import com.example.allowancetracker.data.model.TransactionType
@@ -98,6 +98,7 @@ import com.example.allowancetracker.ui.components.getCategoryColor
 import com.example.allowancetracker.ui.components.rememberCategoryColorMap
 import com.example.allowancetracker.ui.viewmodel.TrackerViewModel
 import com.example.allowancetracker.util.Money
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -119,22 +120,22 @@ fun TrackerMainScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val kids by viewModel.kids.collectAsState()
-    val selectedKid by viewModel.selectedKid.collectAsState()
-    val hasNoKids by viewModel.hasNoKids.collectAsState()
-    val balanceCents by viewModel.balanceCents.collectAsState()
-    val transactions by viewModel.transactions.collectAsState()
-    val categoryIncome by viewModel.categoryIncome.collectAsState()
-    val categorySpending by viewModel.categorySpending.collectAsState()
-    val matchingIncomeCategories by viewModel.matchingIncomeCategories.collectAsState()
-    val matchingExpenseCategories by viewModel.matchingExpenseCategories.collectAsState()
-    val selectedCategories by viewModel.selectedCategories.collectAsState()
-    val categories by viewModel.categories.collectAsState()
-    val filterBarCategories by viewModel.filterBarCategories.collectAsState()
-    val usedCategories by viewModel.usedCategories.collectAsState()
-    val selectedFilterTag by viewModel.selectedFilterTag.collectAsState()
-    val startDateMillis by viewModel.startDateMillis.collectAsState()
-    val endDateMillis by viewModel.endDateMillis.collectAsState()
+    val kids by viewModel.kids.collectAsStateWithLifecycle()
+    val selectedKid by viewModel.selectedKid.collectAsStateWithLifecycle()
+    val hasNoKids by viewModel.hasNoKids.collectAsStateWithLifecycle()
+    val balanceCents by viewModel.balanceCents.collectAsStateWithLifecycle()
+    val transactions by viewModel.transactions.collectAsStateWithLifecycle()
+    val categoryIncome by viewModel.categoryIncome.collectAsStateWithLifecycle()
+    val categorySpending by viewModel.categorySpending.collectAsStateWithLifecycle()
+    val matchingIncomeCategories by viewModel.matchingIncomeCategories.collectAsStateWithLifecycle()
+    val matchingExpenseCategories by viewModel.matchingExpenseCategories.collectAsStateWithLifecycle()
+    val selectedCategories by viewModel.selectedCategories.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val filterBarCategories by viewModel.filterBarCategories.collectAsStateWithLifecycle()
+    val usedCategories by viewModel.usedCategories.collectAsStateWithLifecycle()
+    val selectedFilterTag by viewModel.selectedFilterTag.collectAsStateWithLifecycle()
+    val startDateMillis by viewModel.startDateMillis.collectAsStateWithLifecycle()
+    val endDateMillis by viewModel.endDateMillis.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var kidMenuExpanded by remember { mutableStateOf(false) }
@@ -297,7 +298,7 @@ fun TrackerMainScreen(
                     }
                 )
 
-                TabRow(selectedTabIndex = selectedTabIndex) {
+                PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
                     TrackerTab.entries.forEachIndexed { index, tab ->
                         Tab(
                             selected = selectedTabIndex == index,
@@ -1108,20 +1109,18 @@ fun SwipeableTransactionItem(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { targetValue ->
-            // Ask for confirmation instead of deleting; the row springs back.
-            if (targetValue == SwipeToDismissBoxValue.EndToStart) {
-                onDelete()
-            }
-            false
-        }
-    )
+    val dismissState = rememberSwipeToDismissBoxState()
+    val scope = rememberCoroutineScope()
 
     SwipeToDismissBox(
         state = dismissState,
         modifier = modifier.fillMaxWidth(),
         enableDismissFromStartToEnd = false,
+        onDismiss = {
+            // Ask for confirmation instead of deleting; the row springs back.
+            onDelete()
+            scope.launch { dismissState.reset() }
+        },
         backgroundContent = {
             Box(
                 modifier = Modifier
