@@ -50,6 +50,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
@@ -60,7 +61,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.allowancetracker.R
 import com.example.allowancetracker.ui.components.AddKidDialog
 import com.example.allowancetracker.ui.components.AddTransactionBottomSheet
+import com.example.allowancetracker.ui.components.EditKidsDialog
 import com.example.allowancetracker.ui.components.ManageCategoriesDialog
+import com.example.allowancetracker.ui.theme.EntryButtonNavy
 import com.example.allowancetracker.ui.viewmodel.TrackerViewModel
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -96,12 +99,14 @@ fun TrackerMainScreen(
     val selectedCategories by viewModel.selectedCategories.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val usedCategories by viewModel.usedCategories.collectAsStateWithLifecycle()
+    val kidsWithEntries by viewModel.kidsWithEntries.collectAsStateWithLifecycle()
     val startDateMillis by viewModel.startDateMillis.collectAsStateWithLifecycle()
     val endDateMillis by viewModel.endDateMillis.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var kidMenuExpanded by remember { mutableStateOf(false) }
     var showAddKidDialog by rememberSaveable { mutableStateOf(false) }
+    var showEditKidsDialog by rememberSaveable { mutableStateOf(false) }
     var showManageCategoriesDialog by rememberSaveable { mutableStateOf(false) }
     var overflowExpanded by remember { mutableStateOf(false) }
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(TrackerTab.RUNNING_TALLY.ordinal) }
@@ -199,25 +204,16 @@ fun TrackerMainScreen(
                                 DropdownMenuItem(
                                     text = {
                                         Text(
-                                            text = stringResource(R.string.menu_add_kid),
+                                            text = stringResource(R.string.menu_edit_kids),
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                     },
                                     onClick = {
                                         kidMenuExpanded = false
-                                        showAddKidDialog = true
+                                        showEditKidsDialog = true
                                     }
                                 )
-                                selectedKid?.let { kidName ->
-                                    DropdownMenuItem(
-                                        text = { Text(text = stringResource(R.string.menu_remove_kid, kidName)) },
-                                        onClick = {
-                                            kidMenuExpanded = false
-                                            viewModel.removeKidIfUnused(kidName)
-                                        }
-                                    )
-                                }
                             }
                         }
                     },
@@ -298,8 +294,8 @@ fun TrackerMainScreen(
                 ExtendedFloatingActionButton(
                     onClick = { showEntrySheet = true },
                     expanded = true,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = EntryButtonNavy,
+                    contentColor = Color.White,
                     icon = {
                         Icon(
                             imageVector = Icons.Default.Add,
@@ -379,6 +375,16 @@ fun TrackerMainScreen(
                 viewModel.addKid(newKidName)
                 showAddKidDialog = false
             }
+        )
+    }
+
+    if (showEditKidsDialog) {
+        EditKidsDialog(
+            kids = kids,
+            kidsWithEntries = kidsWithEntries,
+            onAddKid = viewModel::addKid,
+            onRemoveKid = viewModel::removeKid,
+            onDismiss = { showEditKidsDialog = false }
         )
     }
 

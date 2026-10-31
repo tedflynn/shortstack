@@ -6,8 +6,7 @@
     <string name="kid_menu_none">Add kid</string>
     <string name="cd_select_kid">Select kid</string>
     <string name="cd_selected">Selected</string>
-    <string name="menu_add_kid">+ Kid</string>
-    <string name="menu_remove_kid">Remove %1$s</string>
+    <string name="menu_edit_kids">Edit Kids</string>
     <string name="cd_more_options">More options</string>
     <string name="menu_export_backup">Export Backup to Drive</string>
     <string name="menu_restore_backup">Restore Backup</string>
@@ -23,6 +22,7 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_delete">Delete</string>
     <string name="action_done">Done</string>
+    <string name="action_remove">Remove</string>
     <string name="cd_delete_item">Delete %1$s</string>
     <string name="cd_delete_entry">Delete entry</string>
 
@@ -37,6 +37,13 @@
     <string name="add_kid_name_hint">e.g., Leo, Sam…</string>
     <string name="add_kid_name_error">Please enter a name.</string>
     <string name="add_kid_confirm">Add Kid</string>
+
+    <!-- Edit kids dialog -->
+    <string name="edit_kids_title">Edit Kids</string>
+    <string name="kid_has_entries">Has entries</string>
+    <string name="kid_no_entries">No entries</string>
+    <string name="remove_kid_title">Remove %1$s?</string>
+    <string name="remove_kid_body">Removing %1$s will remove all entries associated with them and cannot be undone. Do you really want to do this?</string>
 
     <!-- Categories -->
     <string name="manage_categories_title">Manage Categories</string>
@@ -93,7 +100,6 @@
     <!-- Snackbar messages -->
     <string name="message_switched_kid">Switched to %1$s\'s ledger</string>
     <string name="message_kid_removed">Removed %1$s</string>
-    <string name="message_kid_has_entries">Can\'t remove %1$s because they have ledger entries</string>
     <string name="message_category_added">Added \"%1$s\" to categories</string>
     <string name="message_category_removed">Removed unused category \"%1$s\"</string>
     <string name="message_category_in_use">Can\'t delete \"%1$s\" because it\'s used in entries</string>

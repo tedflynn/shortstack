@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import com.example.allowancetracker.R
 import com.example.allowancetracker.data.model.Transaction
 import com.example.allowancetracker.data.model.TransactionType
+import com.example.allowancetracker.ui.theme.CategoryTagBackground
+import com.example.allowancetracker.ui.theme.CategoryTagText
 import com.example.allowancetracker.ui.theme.CreditGreen
 import com.example.allowancetracker.ui.theme.DebitRed
 import com.example.allowancetracker.util.Money
@@ -278,12 +280,12 @@ fun TransactionRowCard(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer
+                            color = CategoryTagBackground
                         ) {
                             Text(
                                 text = transaction.category,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                color = CategoryTagText,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }

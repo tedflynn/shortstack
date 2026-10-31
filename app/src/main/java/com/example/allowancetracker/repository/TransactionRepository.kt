@@ -74,9 +74,13 @@ class TransactionRepository(
         }
     }
 
-    suspend fun deleteUnusedKid(name: String): Boolean {
-        return withContext(Dispatchers.IO) {
-            transactionDao.deleteUnusedKid(name) > 0
+    /** Permanently deletes a kid and all of their entries, together or not at all. */
+    suspend fun deleteKidAndEntries(name: String) {
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                transactionDao.deleteTransactionsForKid(name)
+                transactionDao.deleteKid(name)
+            }
         }
     }
 

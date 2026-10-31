@@ -95,6 +95,16 @@ class TrackerViewModel(
             initialValue = DefaultCategories.DEFAULT_CATEGORIES
         )
 
+    /** Kids who have at least one entry; they can't be removed. */
+    val kidsWithEntries: StateFlow<Set<String>> =
+        repository.allTransactions
+            .map { list -> list.map { tx -> tx.kidName }.toSet() }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = emptySet()
+            )
+
     val usedCategories: StateFlow<Set<String>> =
         repository.allTransactions
             .map { list ->
@@ -259,13 +269,11 @@ class TrackerViewModel(
         }
     }
 
-    fun removeKidIfUnused(kidName: String) {
+    /** Removes the kid and all of their entries; the UI confirms first when they have entries. */
+    fun removeKid(kidName: String) {
         viewModelScope.launch {
-            if (repository.deleteUnusedKid(kidName)) {
-                emitMessage(R.string.message_kid_removed, kidName)
-            } else {
-                emitMessage(R.string.message_kid_has_entries, kidName)
-            }
+            repository.deleteKidAndEntries(kidName)
+            emitMessage(R.string.message_kid_removed, kidName)
         }
     }
 

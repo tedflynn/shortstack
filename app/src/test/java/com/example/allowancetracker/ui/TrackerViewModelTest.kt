@@ -84,7 +84,7 @@ class TrackerViewModelTest {
         val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
         vm.selectedKid.awaitValue { it == "Sam" }
 
-        vm.removeKidIfUnused("Sam")
+        vm.removeKid("Sam")
         vm.selectedKid.awaitValue { it == "Ada" }
 
         val staleVm = TrackerViewModel(repository, FakeStore(initial = "Ghost"))
@@ -117,19 +117,23 @@ class TrackerViewModelTest {
     }
 
     @Test
-    fun kidWithEntriesIsNotRemoved() = runBlocking {
+    fun removingKidDeletesOnlyTheirEntries() = runBlocking {
         repository.insertTransaction(
             Transaction(kidName = "Sam", title = "Allowance", amountCents = 500, type = TransactionType.CREDIT)
         )
+        repository.insertTransaction(
+            Transaction(kidName = "Ada", title = "Gift", amountCents = 700, type = TransactionType.CREDIT)
+        )
         val vm = TrackerViewModel(repository, FakeStore())
-        vm.kids.awaitValue { it == listOf("Sam") }
+        vm.kids.awaitValue { it.toSet() == setOf("Sam", "Ada") }
 
         // Subscribe before acting: uiMessages doesn't replay past messages.
         val message = async(start = CoroutineStart.UNDISPATCHED) {
             vm.uiMessages.awaitValue { true }
         }
-        vm.removeKidIfUnused("Sam")
-        assertEquals(UiMessage(R.string.message_kid_has_entries, listOf("Sam")), message.await())
-        assertEquals(listOf("Sam"), vm.kids.value)
+        vm.removeKid("Sam")
+        assertEquals(UiMessage(R.string.message_kid_removed, listOf("Sam")), message.await())
+        vm.kids.awaitValue { it == listOf("Ada") }
+        assertEquals(listOf("Ada"), repository.allTransactions.first().map { it.kidName })
     }
 }

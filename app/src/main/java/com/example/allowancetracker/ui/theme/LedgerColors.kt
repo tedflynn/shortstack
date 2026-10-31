@@ -25,6 +25,13 @@ internal val Red900 = Color(0xFF7F1D1D)
 val CreditGreen = Color(0xFF047857) // emerald-700
 val DebitRed = Color(0xFFB91C1C) // red-700
 
+/** The floating "+ Entry" button. */
+val EntryButtonNavy = Color(0xFF1E3A8A) // blue-900
+
+/** Category tags on ledger entries: soft gray with black text. */
+val CategoryTagBackground = Slate200
+val CategoryTagText = Color.Black
+
 /** Light backgrounds behind the selected Income / Expense choice. */
 val CreditContainer = Emerald100
 val OnCreditContainer = Emerald900

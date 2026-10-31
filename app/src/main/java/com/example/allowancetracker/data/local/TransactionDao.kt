@@ -30,14 +30,11 @@ interface TransactionDao {
     @Query("SELECT * FROM kids ORDER BY createdAt ASC, id ASC")
     suspend fun getAllKidsOnce(): List<KidProfile>
 
-    @Query(
-        """
-        DELETE FROM kids
-        WHERE name = :name
-          AND NOT EXISTS (SELECT 1 FROM transactions WHERE kidName = :name)
-        """
-    )
-    suspend fun deleteUnusedKid(name: String): Int
+    @Query("DELETE FROM kids WHERE name = :name")
+    suspend fun deleteKid(name: String): Int
+
+    @Query("DELETE FROM transactions WHERE kidName = :kidName")
+    suspend fun deleteTransactionsForKid(kidName: String): Int
 
     @Query("SELECT name FROM categories ORDER BY id ASC")
     fun getAllCategoryNames(): Flow<List<String>>
