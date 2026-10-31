@@ -39,8 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.allowancetracker.data.local.CategorySum
-import java.text.NumberFormat
-import java.util.Locale
+import com.example.allowancetracker.util.Money
 
 @Composable
 fun rememberCategoryColorMap(): Map<String, Color> {
@@ -92,7 +91,7 @@ fun CategoryDonutChart(
     }
 
     val totalSpending = remember(categorySpending) {
-        categorySpending.sumOf { it.total }.coerceAtLeast(0.0)
+        categorySpending.sumOf { it.totalCents }.coerceAtLeast(0L)
     }
 
     var animationTriggered by remember { mutableStateOf(false) }
@@ -101,12 +100,11 @@ fun CategoryDonutChart(
     }
 
     val animatedProgress by animateFloatAsState(
-        targetValue = if (animationTriggered && totalSpending > 0.0) 1f else 0f,
+        targetValue = if (animationTriggered && totalSpending > 0L) 1f else 0f,
         animationSpec = tween(durationMillis = 750, easing = FastOutSlowInEasing),
         label = "DonutSweepAnimation"
     )
 
-    val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale.US) }
     val emptyRingColor = MaterialTheme.colorScheme.surfaceVariant
 
     Box(
@@ -119,7 +117,7 @@ fun CategoryDonutChart(
             val topLeftOffset = Offset(strokePx / 2f, strokePx / 2f)
             val arcSize = Size(diameter, diameter)
 
-            if (totalSpending <= 0.0 || categorySpending.isEmpty()) {
+            if (totalSpending <= 0L || categorySpending.isEmpty()) {
                 drawArc(
                     color = emptyRingColor,
                     startAngle = 0f,
@@ -134,7 +132,7 @@ fun CategoryDonutChart(
                 val gapDegrees = if (categorySpending.size > 1) 2.5f else 0f
 
                 categorySpending.forEach { item ->
-                    val proportion = (item.total / totalSpending).toFloat()
+                    val proportion = item.totalCents.toFloat() / totalSpending
                     val rawSweep = proportion * 360f * animatedProgress
                     val adjustedSweep = (rawSweep - gapDegrees).coerceAtLeast(1f)
                     val segmentColor = getCategoryColor(item.category, colorMap, fallbackPalette)
@@ -157,7 +155,7 @@ fun CategoryDonutChart(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            if (totalSpending <= 0.0) {
+            if (totalSpending <= 0L) {
                 Text(
                     text = emptyLabel,
                     style = MaterialTheme.typography.labelLarge,
@@ -176,7 +174,7 @@ fun CategoryDonutChart(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = currencyFormatter.format(totalSpending),
+                    text = Money.format(totalSpending),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -206,11 +204,10 @@ fun CategoryLegend(
     }
 
     val totalSpending = remember(categorySpending) {
-        categorySpending.sumOf { it.total }.coerceAtLeast(0.0)
+        categorySpending.sumOf { it.totalCents }.coerceAtLeast(0L)
     }
-    val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale.US) }
 
-    if (categorySpending.isEmpty() || totalSpending <= 0.0) {
+    if (categorySpending.isEmpty() || totalSpending <= 0L) {
         Text(
             text = "Record a debit transaction to see spending breakdown by category.",
             style = MaterialTheme.typography.bodySmall,
@@ -226,8 +223,8 @@ fun CategoryLegend(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         categorySpending.forEach { item ->
-            val percentage = if (totalSpending > 0.0) {
-                ((item.total / totalSpending) * 100.0).toInt()
+            val percentage = if (totalSpending > 0L) {
+                (item.totalCents * 100 / totalSpending).toInt()
             } else {
                 0
             }
@@ -256,7 +253,7 @@ fun CategoryLegend(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "${currencyFormatter.format(item.total)} ($percentage%)",
+                        text = "${Money.format(item.totalCents)} ($percentage%)",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

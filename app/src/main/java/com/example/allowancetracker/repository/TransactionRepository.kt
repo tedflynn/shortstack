@@ -1,7 +1,9 @@
 package com.example.allowancetracker.repository
 
+import androidx.room.withTransaction
+import com.example.allowancetracker.data.backup.BackupCodec
+import com.example.allowancetracker.data.local.AppDatabase
 import com.example.allowancetracker.data.local.CategorySum
-import com.example.allowancetracker.data.local.TransactionDao
 import com.example.allowancetracker.data.model.CategoryEntity
 import com.example.allowancetracker.data.model.DefaultCategories
 import com.example.allowancetracker.data.model.KidProfile
@@ -10,19 +12,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.io.InputStream
 import java.io.OutputStream
 
 class TransactionRepository(
-    private val transactionDao: TransactionDao
+    private val database: AppDatabase
 ) {
-    private val jsonSerializer = Json {
-        prettyPrint = true
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-    }
+    private val transactionDao = database.transactionDao()
 
     val kidNames: Flow<List<String>> = transactionDao.getAllKidNames()
 
@@ -34,7 +30,7 @@ class TransactionRepository(
         return transactionDao.getTransactionsForKid(kidName)
     }
 
-    fun getRunningBalanceForKid(kidName: String): Flow<Double?> {
+    fun getRunningBalanceForKid(kidName: String): Flow<Long?> {
         return transactionDao.getRunningBalanceForKid(kidName)
     }
 
@@ -96,9 +92,11 @@ class TransactionRepository(
 
     suspend fun insertTransaction(transaction: Transaction) {
         withContext(Dispatchers.IO) {
-            transactionDao.insertKid(KidProfile(name = transaction.kidName))
-            transactionDao.insertCategory(CategoryEntity(name = transaction.category))
-            transactionDao.insert(transaction)
+            database.withTransaction {
+                transactionDao.insertKid(KidProfile(name = transaction.kidName))
+                transactionDao.insertCategory(CategoryEntity(name = transaction.category))
+                transactionDao.insert(transaction)
+            }
         }
     }
 
@@ -108,41 +106,45 @@ class TransactionRepository(
         }
     }
 
+    /** Writes every kid, category and transaction. Closes [outputStream]. */
     suspend fun exportToJson(outputStream: OutputStream): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
-            val currentTransactions = transactionDao.getAllTransactions().first()
-            val jsonPayload = jsonSerializer.encodeToString(currentTransactions)
             outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                writer.write(jsonPayload)
-                writer.flush()
+                val payload = database.withTransaction {
+                    val transactions = transactionDao.getAllTransactions().first()
+                    BackupCodec.encode(
+                        kids = transactionDao.getAllKidsOnce(),
+                        categories = transactionDao.getAllCategoryNamesOnce(),
+                        transactions = transactions
+                    ) to transactions.size
+                }
+                writer.write(payload.first)
+                payload.second
             }
-            currentTransactions.size
         }
     }
 
+    /**
+     * Restores a backup. The file is fully validated before the database is
+     * touched, and the replace runs in one database transaction, so a failure
+     * leaves existing data exactly as it was. Closes [inputStream].
+     */
     suspend fun importFromJson(
         inputStream: InputStream,
         replaceExisting: Boolean = false
     ): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
             val rawJson = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            val importedTransactions = jsonSerializer.decodeFromString<List<Transaction>>(rawJson)
-            if (replaceExisting) {
-                transactionDao.deleteAll()
+            val backup = BackupCodec.decode(rawJson)
+            database.withTransaction {
+                if (replaceExisting) {
+                    transactionDao.deleteAll()
+                }
+                backup.kids.forEach { transactionDao.insertKid(it) }
+                backup.categories.forEach { transactionDao.insertCategory(CategoryEntity(name = it)) }
+                transactionDao.insertAll(backup.transactions)
             }
-            val normalizedTransactions = if (replaceExisting) {
-                importedTransactions
-            } else {
-                importedTransactions.map { it.copy(id = 0L) }
-            }
-            normalizedTransactions.map { it.kidName }.distinct().forEach { kidName ->
-                transactionDao.insertKid(KidProfile(name = kidName))
-            }
-            normalizedTransactions.forEach { tx ->
-                transactionDao.insertCategory(CategoryEntity(name = tx.category))
-            }
-            transactionDao.insertAll(normalizedTransactions)
-            normalizedTransactions.size
+            backup.transactions.size
         }
     }
 }

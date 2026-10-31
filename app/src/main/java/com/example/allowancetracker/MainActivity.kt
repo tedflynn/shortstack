@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val database = AppDatabase.getInstance(applicationContext)
-        val repository = TransactionRepository(database.transactionDao())
+        val repository = TransactionRepository(database)
         val viewModelFactory = TrackerViewModel.Factory(repository)
 
         setContent {

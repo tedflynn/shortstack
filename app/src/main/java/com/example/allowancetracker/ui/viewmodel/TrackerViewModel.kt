@@ -8,6 +8,7 @@ import com.example.allowancetracker.data.model.DefaultCategories
 import com.example.allowancetracker.data.model.Transaction
 import com.example.allowancetracker.data.model.TransactionType
 import com.example.allowancetracker.repository.TransactionRepository
+import com.example.allowancetracker.util.DateRanges
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +25,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.Calendar
 
 class TrackerViewModel(
     private val repository: TransactionRepository
@@ -79,6 +79,7 @@ class TrackerViewModel(
     )
     val selectedCategories: StateFlow<Set<String>> = _selectedCategories.asStateFlow()
 
+    // Raw DatePicker selections (midnight UTC); see DateRanges.toLocalRange.
     val startDateMillis: MutableStateFlow<Long?> = MutableStateFlow(null)
     val endDateMillis: MutableStateFlow<Long?> = MutableStateFlow(null)
 
@@ -92,14 +93,14 @@ class TrackerViewModel(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val balance: StateFlow<Double> = _selectedKid
+    val balanceCents: StateFlow<Long> = _selectedKid
         .flatMapLatest { kidName ->
-            repository.getRunningBalanceForKid(kidName).map { it ?: 0.0 }
+            repository.getRunningBalanceForKid(kidName).map { it ?: 0L }
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = 0.0
+            initialValue = 0L
         )
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -134,19 +135,13 @@ class TrackerViewModel(
         startDateMillis,
         endDateMillis
     ) { kidName, start, end ->
-        val effectiveStart = start?.let { toStartOfDayMillis(it) } ?: 0L
-        val effectiveEnd = end?.let { toEndOfDayMillis(it) } ?: Long.MAX_VALUE
-        Triple(kidName, effectiveStart, effectiveEnd)
-    }.flatMapLatest { (kidName, startTimestamp, endTimestamp) ->
-        if (startTimestamp <= endTimestamp) {
-            repository.getCreditTotalsByCategoryForKidInRange(kidName, startTimestamp, endTimestamp)
-        } else {
-            repository.getCreditTotalsByCategoryForKidInRange(kidName, endTimestamp, startTimestamp)
-        }
+        kidName to DateRanges.toLocalRange(start, end)
+    }.flatMapLatest { (kidName, range) ->
+        repository.getCreditTotalsByCategoryForKidInRange(kidName, range.first, range.last)
     }
 
     val matchingIncomeCategories: StateFlow<List<String>> = rawCategoryIncome
-        .map { sums -> sums.filter { it.total > 0 }.map { it.category } }
+        .map { sums -> sums.filter { it.totalCents > 0 }.map { it.category } }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -171,19 +166,13 @@ class TrackerViewModel(
         startDateMillis,
         endDateMillis
     ) { kidName, start, end ->
-        val effectiveStart = start?.let { toStartOfDayMillis(it) } ?: 0L
-        val effectiveEnd = end?.let { toEndOfDayMillis(it) } ?: Long.MAX_VALUE
-        Triple(kidName, effectiveStart, effectiveEnd)
-    }.flatMapLatest { (kidName, startTimestamp, endTimestamp) ->
-        if (startTimestamp <= endTimestamp) {
-            repository.getDebitTotalsByCategoryForKidInRange(kidName, startTimestamp, endTimestamp)
-        } else {
-            repository.getDebitTotalsByCategoryForKidInRange(kidName, endTimestamp, startTimestamp)
-        }
+        kidName to DateRanges.toLocalRange(start, end)
+    }.flatMapLatest { (kidName, range) ->
+        repository.getDebitTotalsByCategoryForKidInRange(kidName, range.first, range.last)
     }
 
     val matchingExpenseCategories: StateFlow<List<String>> = rawCategorySpending
-        .map { sums -> sums.filter { it.total > 0 }.map { it.category } }
+        .map { sums -> sums.filter { it.totalCents > 0 }.map { it.category } }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -261,21 +250,22 @@ class TrackerViewModel(
 
     fun addTransaction(
         title: String,
-        amount: Double,
+        amountCents: Long,
         type: TransactionType,
         category: String,
         timestamp: Long = System.currentTimeMillis()
     ) {
-        if (title.isBlank() || amount <= 0.0) return
+        val trimmedCategory = category.trim()
+        if (title.isBlank() || amountCents <= 0L || trimmedCategory.isBlank()) return
         val currentKid = _selectedKid.value
-        _selectedCategories.update { it + category.trim() }
+        _selectedCategories.update { it + trimmedCategory }
         viewModelScope.launch {
             val transaction = Transaction(
                 kidName = currentKid,
                 title = title.trim(),
-                amount = amount,
+                amountCents = amountCents,
                 type = type,
-                category = category,
+                category = trimmedCategory,
                 timestamp = timestamp
             )
             repository.insertTransaction(transaction)
@@ -315,26 +305,6 @@ class TrackerViewModel(
                     _uiMessages.emit("Restore failed: ${error.localizedMessage ?: "Invalid JSON format"}")
                 }
         }
-    }
-
-    private fun toStartOfDayMillis(epochMillis: Long): Long {
-        return Calendar.getInstance().apply {
-            timeInMillis = epochMillis
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-    }
-
-    private fun toEndOfDayMillis(epochMillis: Long): Long {
-        return Calendar.getInstance().apply {
-            timeInMillis = epochMillis
-            set(Calendar.HOUR_OF_DAY, 23)
-            set(Calendar.MINUTE, 59)
-            set(Calendar.SECOND, 59)
-            set(Calendar.MILLISECOND, 999)
-        }.timeInMillis
     }
 
     class Factory(

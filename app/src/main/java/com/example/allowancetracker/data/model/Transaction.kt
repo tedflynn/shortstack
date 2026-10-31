@@ -11,7 +11,6 @@ enum class TransactionType {
     DEBIT
 }
 
-@Serializable
 @Entity(
     tableName = "kids",
     indices = [Index(value = ["name"], unique = true)]
@@ -27,7 +26,6 @@ data class KidProfile(
     }
 }
 
-@Serializable
 @Entity(
     tableName = "categories",
     indices = [Index(value = ["name"], unique = true)]
@@ -42,20 +40,20 @@ data class CategoryEntity(
     }
 }
 
-@Serializable
 @Entity(tableName = "transactions")
 data class Transaction(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,
     val kidName: String = DEFAULT_KID_NAME,
     val title: String,
-    val amount: Double,
+    /** Always positive, in whole cents; [type] decides whether it adds or subtracts. */
+    val amountCents: Long,
     val type: TransactionType,
     val category: String = DefaultCategories.DEFAULT_CATEGORIES.first(),
     val timestamp: Long = System.currentTimeMillis()
 ) {
     init {
-        require(amount > 0.0) { "Transaction amount must always be positive." }
+        require(amountCents > 0L) { "Transaction amount must always be positive." }
         require(title.isNotBlank()) { "Transaction title cannot be blank." }
         require(kidName.isNotBlank()) { "Kid name cannot be blank." }
     }

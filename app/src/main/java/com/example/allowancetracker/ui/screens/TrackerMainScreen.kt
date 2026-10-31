@@ -97,10 +97,11 @@ import com.example.allowancetracker.ui.components.CategoryLegend
 import com.example.allowancetracker.ui.components.getCategoryColor
 import com.example.allowancetracker.ui.components.rememberCategoryColorMap
 import com.example.allowancetracker.ui.viewmodel.TrackerViewModel
-import java.text.NumberFormat
+import com.example.allowancetracker.util.Money
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 private val CreditGreen = Color(0xFF2E7D32)
 private val DebitRed = Color(0xFFC62828)
@@ -120,7 +121,7 @@ fun TrackerMainScreen(
     val context = LocalContext.current
     val kids by viewModel.kids.collectAsState()
     val selectedKid by viewModel.selectedKid.collectAsState()
-    val balance by viewModel.balance.collectAsState()
+    val balanceCents by viewModel.balanceCents.collectAsState()
     val transactions by viewModel.transactions.collectAsState()
     val categoryIncome by viewModel.categoryIncome.collectAsState()
     val categorySpending by viewModel.categorySpending.collectAsState()
@@ -327,7 +328,7 @@ fun TrackerMainScreen(
             TrackerTab.RUNNING_TALLY -> {
                 RunningTallyTabContent(
                     kidName = selectedKid,
-                    balance = balance,
+                    balanceCents = balanceCents,
                     transactions = transactions,
                     filterCategories = filterBarCategories,
                     selectedFilterTag = selectedFilterTag,
@@ -407,10 +408,10 @@ fun TrackerMainScreen(
             kidName = selectedKid,
             categories = categories,
             onDismiss = { showEntrySheet = false },
-            onSaveTransaction = { title, amount, type, category ->
+            onSaveTransaction = { title, amountCents, type, category ->
                 viewModel.addTransaction(
                     title = title,
-                    amount = amount,
+                    amountCents = amountCents,
                     type = type,
                     category = category
                 )
@@ -610,7 +611,7 @@ fun AddKidDialog(
 @Composable
 fun RunningTallyTabContent(
     kidName: String,
-    balance: Double,
+    balanceCents: Long,
     transactions: List<Transaction>,
     filterCategories: List<String>,
     selectedFilterTag: String?,
@@ -619,6 +620,33 @@ fun RunningTallyTabContent(
     onDeleteTransaction: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var pendingDelete by remember { mutableStateOf<Transaction?>(null) }
+
+    pendingDelete?.let { transaction ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete entry?") },
+            text = {
+                Text("\"${transaction.title}\" (${Money.format(transaction.amountCents)}) will be permanently removed.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteTransaction(transaction)
+                        pendingDelete = null
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(
@@ -632,7 +660,7 @@ fun RunningTallyTabContent(
         item(key = "header_card") {
             BalanceHeaderCard(
                 kidName = kidName,
-                runningBalance = balance
+                runningBalanceCents = balanceCents
             )
         }
 
@@ -656,7 +684,7 @@ fun RunningTallyTabContent(
             ) { transaction ->
                 SwipeableTransactionItem(
                     transaction = transaction,
-                    onDelete = { onDeleteTransaction(transaction) }
+                    onDelete = { pendingDelete = transaction }
                 )
             }
         }
@@ -680,7 +708,10 @@ fun CategoryBreakdownTabContent(
     onDateRangeSelected: (Long?, Long?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy", Locale.US) }
+    // DatePicker values are midnight UTC, so format them in UTC to show the chosen day.
+    val dateFormatter = remember {
+        SimpleDateFormat("MMM d, yyyy", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+    }
     var pickingStartDate by rememberSaveable { mutableStateOf(false) }
     var pickingEndDate by rememberSaveable { mutableStateOf(false) }
 
@@ -978,11 +1009,10 @@ private fun buildDateRangeSubtitle(
 @Composable
 fun BalanceHeaderCard(
     kidName: String,
-    runningBalance: Double,
+    runningBalanceCents: Long,
     modifier: Modifier = Modifier
 ) {
-    val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale.US) }
-    val balanceColor = if (runningBalance < 0.0) {
+    val balanceColor = if (runningBalanceCents < 0L) {
         DebitRed
     } else {
         MaterialTheme.colorScheme.onPrimaryContainer
@@ -1007,7 +1037,7 @@ fun BalanceHeaderCard(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = currencyFormatter.format(runningBalance),
+                text = Money.format(runningBalanceCents),
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.ExtraBold,
                 color = balanceColor
@@ -1025,20 +1055,18 @@ fun SwipeableTransactionItem(
 ) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { targetValue ->
-            if (targetValue == SwipeToDismissBoxValue.EndToStart ||
-                targetValue == SwipeToDismissBoxValue.StartToEnd
-            ) {
+            // Ask for confirmation instead of deleting; the row springs back.
+            if (targetValue == SwipeToDismissBoxValue.EndToStart) {
                 onDelete()
-                true
-            } else {
-                false
             }
+            false
         }
     )
 
     SwipeToDismissBox(
         state = dismissState,
         modifier = modifier.fillMaxWidth(),
+        enableDismissFromStartToEnd = false,
         backgroundContent = {
             Box(
                 modifier = Modifier
@@ -1070,15 +1098,14 @@ fun TransactionRowCard(
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale.US) }
     val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy • h:mm a", Locale.US) }
 
     val isCredit = transaction.type == TransactionType.CREDIT
     val amountColor = if (isCredit) CreditGreen else DebitRed
     val formattedSignedAmount = if (isCredit) {
-        "+${currencyFormatter.format(transaction.amount)}"
+        "+${Money.format(transaction.amountCents)}"
     } else {
-        "-${currencyFormatter.format(transaction.amount)}"
+        "-${Money.format(transaction.amountCents)}"
     }
 
     Card(
@@ -1210,7 +1237,7 @@ fun AddTransactionBottomSheet(
     kidName: String,
     categories: List<String>,
     onDismiss: () -> Unit,
-    onSaveTransaction: (title: String, amount: Double, type: TransactionType, category: String) -> Unit
+    onSaveTransaction: (title: String, amountCents: Long, type: TransactionType, category: String) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedType by rememberSaveable { mutableStateOf(TransactionType.CREDIT) }
@@ -1329,10 +1356,10 @@ fun AddTransactionBottomSheet(
 
             Button(
                 onClick = {
-                    val parsedAmount = amountInput.toDoubleOrNull()
+                    val parsedCents = Money.parseToCents(amountInput)
                     when {
-                        parsedAmount == null || parsedAmount <= 0.0 -> {
-                            inputError = "Please enter a valid positive dollar amount."
+                        parsedCents == null -> {
+                            inputError = "Please enter an amount between $0.01 and ${Money.format(Money.MAX_ENTRY_CENTS)}."
                         }
                         noteInput.isBlank() -> {
                             inputError = "Please enter a note for this transaction."
@@ -1340,7 +1367,7 @@ fun AddTransactionBottomSheet(
                         else -> {
                             onSaveTransaction(
                                 noteInput.trim(),
-                                parsedAmount,
+                                parsedCents,
                                 selectedType,
                                 selectedCategory
                             )

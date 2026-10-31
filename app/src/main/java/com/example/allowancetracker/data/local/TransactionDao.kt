@@ -14,8 +14,8 @@ import kotlinx.coroutines.flow.Flow
 data class CategorySum(
     @ColumnInfo(name = "category")
     val category: String,
-    @ColumnInfo(name = "total")
-    val total: Double
+    @ColumnInfo(name = "totalCents")
+    val totalCents: Long
 )
 
 @Dao
@@ -27,8 +27,14 @@ interface TransactionDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertKid(kid: KidProfile): Long
 
+    @Query("SELECT * FROM kids ORDER BY createdAt ASC, id ASC")
+    suspend fun getAllKidsOnce(): List<KidProfile>
+
     @Query("SELECT name FROM categories ORDER BY id ASC")
     fun getAllCategoryNames(): Flow<List<String>>
+
+    @Query("SELECT name FROM categories ORDER BY id ASC")
+    suspend fun getAllCategoryNamesOnce(): List<String>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertCategory(category: CategoryEntity): Long
@@ -74,47 +80,47 @@ interface TransactionDao {
     @Query(
         """
         SELECT 
-            COALESCE(SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE 0.0 END), 0.0) -
-            COALESCE(SUM(CASE WHEN type = 'DEBIT' THEN amount ELSE 0.0 END), 0.0)
+            COALESCE(SUM(CASE WHEN type = 'CREDIT' THEN amountCents ELSE 0 END), 0) -
+            COALESCE(SUM(CASE WHEN type = 'DEBIT' THEN amountCents ELSE 0 END), 0)
         FROM transactions
         """
     )
-    fun getRunningBalance(): Flow<Double?>
+    fun getRunningBalance(): Flow<Long?>
 
     @Query(
         """
         SELECT 
-            COALESCE(SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE 0.0 END), 0.0) -
-            COALESCE(SUM(CASE WHEN type = 'DEBIT' THEN amount ELSE 0.0 END), 0.0)
+            COALESCE(SUM(CASE WHEN type = 'CREDIT' THEN amountCents ELSE 0 END), 0) -
+            COALESCE(SUM(CASE WHEN type = 'DEBIT' THEN amountCents ELSE 0 END), 0)
         FROM transactions
         WHERE kidName = :kidName
         """
     )
-    fun getRunningBalanceForKid(kidName: String): Flow<Double?>
+    fun getRunningBalanceForKid(kidName: String): Flow<Long?>
 
     @Query(
         """
-        SELECT category, SUM(amount) AS total
+        SELECT category, SUM(amountCents) AS totalCents
         FROM transactions
         WHERE type = 'DEBIT'
         GROUP BY category
-        HAVING total > 0
-        ORDER BY total DESC
+        HAVING totalCents > 0
+        ORDER BY totalCents DESC
         """
     )
     fun getDebitTotalsByCategory(): Flow<List<CategorySum>>
 
     @Query(
         """
-        SELECT category, SUM(amount) AS total
+        SELECT category, SUM(amountCents) AS totalCents
         FROM transactions
         WHERE type = 'CREDIT'
           AND kidName = :kidName
           AND timestamp >= :startTimestamp
           AND timestamp <= :endTimestamp
         GROUP BY category
-        HAVING total > 0
-        ORDER BY total DESC
+        HAVING totalCents > 0
+        ORDER BY totalCents DESC
         """
     )
     fun getCreditTotalsByCategoryForKidInRange(
@@ -125,15 +131,15 @@ interface TransactionDao {
 
     @Query(
         """
-        SELECT category, SUM(amount) AS total
+        SELECT category, SUM(amountCents) AS totalCents
         FROM transactions
         WHERE type = 'DEBIT'
           AND kidName = :kidName
           AND timestamp >= :startTimestamp
           AND timestamp <= :endTimestamp
         GROUP BY category
-        HAVING total > 0
-        ORDER BY total DESC
+        HAVING totalCents > 0
+        ORDER BY totalCents DESC
         """
     )
     fun getDebitTotalsByCategoryForKidInRange(
