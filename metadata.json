@@ -1,0 +1,8 @@
+{
+  "name": "bodad",
+  "description": "Complete native Android Kotlin architecture (Jetpack Compose Material 3, Room Database, StateFlow, SAF JSON Backup) and interactive live ledger simulator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
