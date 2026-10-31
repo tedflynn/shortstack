@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -154,7 +156,9 @@ fun TrackerMainScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = selectedKid ?: stringResource(R.string.kid_menu_none),
+                                    // Blank while loading, so "Add kid" only shows when there really are none.
+                                    text = selectedKid
+                                        ?: if (hasNoKids) stringResource(R.string.kid_menu_none) else "",
                                     fontWeight = FontWeight.Bold
                                 )
                                 Icon(
@@ -220,11 +224,12 @@ fun TrackerMainScreen(
                         }
                     },
                     title = {
-                        Text(
-                            text = stringResource(R.string.app_bar_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(start = 8.dp)
+                        Image(
+                            painter = painterResource(R.drawable.logo_bodad),
+                            contentDescription = stringResource(R.string.app_bar_title),
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .height(32.dp)
                         )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

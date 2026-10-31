@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +33,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.allowancetracker.R
 import com.example.allowancetracker.data.model.TransactionType
+import com.example.allowancetracker.ui.theme.CreditContainer
+import com.example.allowancetracker.ui.theme.CreditGreen
+import com.example.allowancetracker.ui.theme.DebitContainer
+import com.example.allowancetracker.ui.theme.DebitRed
+import com.example.allowancetracker.ui.theme.OnCreditContainer
+import com.example.allowancetracker.ui.theme.OnDebitContainer
 import com.example.allowancetracker.util.Money
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -84,6 +91,17 @@ fun AddTransactionBottomSheet(
                             index = index,
                             count = segments.size
                         ),
+                        colors = if (type == TransactionType.CREDIT) {
+                            SegmentedButtonDefaults.colors(
+                                activeContainerColor = CreditContainer,
+                                activeContentColor = OnCreditContainer
+                            )
+                        } else {
+                            SegmentedButtonDefaults.colors(
+                                activeContainerColor = DebitContainer,
+                                activeContentColor = OnDebitContainer
+                            )
+                        },
                         label = {
                             Text(
                                 text = stringResource(label),
@@ -177,7 +195,10 @@ fun AddTransactionBottomSheet(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (selectedType == TransactionType.CREDIT) CreditGreen else DebitRed
+                )
             ) {
                 Text(
                     text = stringResource(R.string.entry_save),

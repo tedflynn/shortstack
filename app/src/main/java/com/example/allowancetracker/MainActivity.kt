@@ -9,9 +9,8 @@ import com.example.allowancetracker.data.local.AppDatabase
 import com.example.allowancetracker.data.local.DataStoreSelectedKidStore
 import com.example.allowancetracker.repository.TransactionRepository
 import com.example.allowancetracker.ui.screens.TrackerMainScreen
+import com.example.allowancetracker.ui.theme.AllowanceTrackerTheme
 import com.example.allowancetracker.ui.viewmodel.TrackerViewModel
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,7 +25,7 @@ class MainActivity : ComponentActivity() {
         )
 
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme()) {
+            AllowanceTrackerTheme {
                 val trackerViewModel: TrackerViewModel = viewModel(factory = viewModelFactory)
                 TrackerMainScreen(viewModel = trackerViewModel)
             }

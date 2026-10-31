@@ -52,6 +52,7 @@ import com.example.allowancetracker.data.model.Transaction
 import com.example.allowancetracker.data.model.TransactionType
 import com.example.allowancetracker.ui.theme.CreditGreen
 import com.example.allowancetracker.ui.theme.DebitRed
+import com.example.allowancetracker.ui.theme.NegativeOnDark
 import com.example.allowancetracker.util.Money
 import java.time.Instant
 import java.time.ZoneId
@@ -151,7 +152,7 @@ fun BalanceHeaderCard(
     modifier: Modifier = Modifier
 ) {
     val balanceColor = if (runningBalanceCents < 0L) {
-        DebitRed
+        NegativeOnDark
     } else {
         MaterialTheme.colorScheme.onPrimaryContainer
     }

@@ -2,7 +2,7 @@
     <string name="app_name">Allowance Tracker</string>
 
     <!-- App bar and menus -->
-    <string name="app_bar_title">Allowance Ledger</string>
+    <string name="app_bar_title">boDad</string>
     <string name="kid_menu_none">Add kid</string>
     <string name="cd_select_kid">Select kid</string>
     <string name="cd_selected">Selected</string>
