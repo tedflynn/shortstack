@@ -95,7 +95,23 @@ class TrackerViewModel(
             initialValue = DefaultCategories.DEFAULT_CATEGORIES
         )
 
-    /** Kids who have at least one entry; they can't be removed. */
+    /**
+     * The category of the most recent entry of each type (across all kids), used to
+     * pre-select the category in the entry form. Types with no entries are absent.
+     */
+    val lastCategoryByType: StateFlow<Map<TransactionType, String>> =
+        repository.allTransactions
+            .map { list ->
+                // allTransactions is newest first, so the first match per type wins.
+                list.groupBy { it.type }.mapValues { (_, entries) -> entries.first().category }
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = emptyMap()
+            )
+
+    /** Kids who have at least one entry. */
     val kidsWithEntries: StateFlow<Set<String>> =
         repository.allTransactions
             .map { list -> list.map { tx -> tx.kidName }.toSet() }
@@ -122,6 +138,7 @@ class TrackerViewModel(
      * ones added later, is shown by default.
      */
     private val _hiddenCategories = MutableStateFlow<Set<String>>(emptySet())
+    val hiddenCategories: StateFlow<Set<String>> = _hiddenCategories
 
     // Raw DatePicker selections (midnight UTC); see DateRanges.toLocalRange.
     private val _startDateMillis = MutableStateFlow<Long?>(null)
@@ -142,28 +159,24 @@ class TrackerViewModel(
         }
     }
 
+    /** The selected kid's balance and entries; null until they have loaded. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val balanceCents: StateFlow<Long> = _selectedKid
+    val ledger: StateFlow<LedgerState?> = _selectedKid
         .flatMapLatest { kidName ->
-            if (kidName == null) flowOf(0L)
-            else repository.getRunningBalanceForKid(kidName).map { it ?: 0L }
+            if (kidName == null) {
+                flowOf(null)
+            } else {
+                // Balance comes from the same list, so the two always match.
+                repository.getTransactionsForKid(kidName).map { entries ->
+                    val balance = entries.sumOf { if (it.type == TransactionType.CREDIT) it.amountCents else -it.amountCents }
+                    LedgerState(balance, entries)
+                }
+            }
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = 0L
-        )
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val transactions: StateFlow<List<Transaction>> = _selectedKid
-        .flatMapLatest { kidName ->
-            if (kidName == null) flowOf(emptyList())
-            else repository.getTransactionsForKid(kidName)
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = emptyList()
+            initialValue = null
         )
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -178,24 +191,13 @@ class TrackerViewModel(
         else repository.getCreditTotalsByCategoryForKidInRange(kidName, range.first, range.last)
     }
 
-    val matchingIncomeCategories: StateFlow<List<String>> = rawCategoryIncome
-        .map { sums -> sums.filter { it.totalCents > 0 }.map { it.category } }
+    /** Income per category in the date range, including categories hidden from the chart. */
+    val incomeSums: StateFlow<List<CategorySum>> = rawCategoryIncome
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList()
         )
-
-    val categoryIncome: StateFlow<List<CategorySum>> = combine(
-        rawCategoryIncome,
-        _hiddenCategories
-    ) { sums, hidden ->
-        sums.filter { it.category.lowercase() !in hidden }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = emptyList()
-    )
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val rawCategorySpending = combine(
@@ -209,37 +211,13 @@ class TrackerViewModel(
         else repository.getDebitTotalsByCategoryForKidInRange(kidName, range.first, range.last)
     }
 
-    val matchingExpenseCategories: StateFlow<List<String>> = rawCategorySpending
-        .map { sums -> sums.filter { it.totalCents > 0 }.map { it.category } }
+    /** Spending per category in the date range, including categories hidden from the chart. */
+    val spendingSums: StateFlow<List<CategorySum>> = rawCategorySpending
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList()
         )
-
-    val categorySpending: StateFlow<List<CategorySum>> = combine(
-        rawCategorySpending,
-        _hiddenCategories
-    ) { sums, hidden ->
-        sums.filter { it.category.lowercase() !in hidden }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = emptyList()
-    )
-
-    /** Categories currently shown in the charts (all of them unless switched off). */
-    val selectedCategories: StateFlow<Set<String>> = combine(
-        matchingIncomeCategories,
-        matchingExpenseCategories,
-        _hiddenCategories
-    ) { income, expenses, hidden ->
-        (income + expenses).filter { it.lowercase() !in hidden }.toSet()
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = emptySet()
-    )
 
     fun toggleCategorySelection(category: String) {
         val key = category.trim().lowercase()
@@ -327,10 +305,25 @@ class TrackerViewModel(
         }
     }
 
+    /** Saves changes to an existing entry (matched by id). */
+    fun updateTransaction(transaction: Transaction) {
+        showCategory(transaction.category)
+        viewModelScope.launch {
+            repository.insertTransaction(transaction)
+        }
+    }
+
+    /** Deletes right away; the snackbar offers Undo, which puts the entry back as it was. */
     fun deleteTransaction(transaction: Transaction) {
         viewModelScope.launch {
             repository.deleteTransaction(transaction)
-            emitMessage(R.string.message_entry_deleted, transaction.title)
+            _uiMessages.emit(
+                UiMessage(
+                    resId = R.string.message_entry_deleted,
+                    args = listOf(transaction.title),
+                    onUndo = { viewModelScope.launch { repository.insertTransaction(transaction) } }
+                )
+            )
         }
     }
 

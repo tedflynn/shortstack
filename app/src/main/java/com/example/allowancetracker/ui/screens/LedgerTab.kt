@@ -1,5 +1,6 @@
 package com.example.allowancetracker.ui.screens
 
+import android.text.format.DateFormat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,14 +30,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,53 +44,30 @@ import androidx.compose.ui.unit.dp
 import com.example.allowancetracker.R
 import com.example.allowancetracker.data.model.Transaction
 import com.example.allowancetracker.data.model.TransactionType
+import com.example.allowancetracker.ui.viewmodel.LedgerState
 import com.example.allowancetracker.ui.theme.CategoryTagBackground
 import com.example.allowancetracker.ui.theme.CategoryTagText
 import com.example.allowancetracker.ui.theme.CreditGreen
 import com.example.allowancetracker.ui.theme.DebitRed
 import com.example.allowancetracker.util.Money
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
+import java.util.Locale
 import kotlinx.coroutines.launch
 
+/** Shows nothing until [ledger] has loaded, so an empty ledger never flashes up. */
 @Composable
 fun RunningTallyTabContent(
     kidName: String,
-    balanceCents: Long,
-    transactions: List<Transaction>,
+    ledger: LedgerState?,
+    onEditTransaction: (Transaction) -> Unit,
     onDeleteTransaction: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var pendingDelete by remember { mutableStateOf<Transaction?>(null) }
-
-    pendingDelete?.let { transaction ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text(stringResource(R.string.delete_entry_title)) },
-            text = {
-                Text(
-                    stringResource(R.string.delete_entry_body, transaction.title, Money.format(transaction.amountCents))
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteTransaction(transaction)
-                        pendingDelete = null
-                    }
-                ) {
-                    Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            }
-        )
-    }
+    if (ledger == null) return
+    val transactions = ledger.transactions
 
     LazyColumn(
         modifier = modifier,
@@ -109,7 +82,7 @@ fun RunningTallyTabContent(
         item(key = "header_card") {
             BalanceHeaderCard(
                 kidName = kidName,
-                runningBalanceCents = balanceCents
+                runningBalanceCents = ledger.balanceCents
             )
         }
 
@@ -124,7 +97,8 @@ fun RunningTallyTabContent(
             ) { transaction ->
                 SwipeableTransactionItem(
                     transaction = transaction,
-                    onDelete = { pendingDelete = transaction }
+                    onClick = { onEditTransaction(transaction) },
+                    onDelete = { onDeleteTransaction(transaction) }
                 )
             }
         }
@@ -173,6 +147,7 @@ fun BalanceHeaderCard(
 @Composable
 fun SwipeableTransactionItem(
     transaction: Transaction,
+    onClick: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -184,7 +159,7 @@ fun SwipeableTransactionItem(
         modifier = modifier.fillMaxWidth(),
         enableDismissFromStartToEnd = false,
         onDismiss = {
-            // Ask for confirmation instead of deleting; the row springs back.
+            // Deleting offers Undo; reset so the row is back in place if it's restored.
             onDelete()
             scope.launch { dismissState.reset() }
         },
@@ -207,6 +182,7 @@ fun SwipeableTransactionItem(
         content = {
             TransactionRowCard(
                 transaction = transaction,
+                onClick = onClick,
                 onDeleteClick = onDelete
             )
         }
@@ -216,11 +192,16 @@ fun SwipeableTransactionItem(
 @Composable
 fun TransactionRowCard(
     transaction: Transaction,
+    onClick: () -> Unit,
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val dateFormatter = remember {
-        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+    // "Oct 30" this year, "Dec 28, 2025" for older entries, in the device's locale order.
+    val shortDate = remember(transaction.timestamp) {
+        val locale = Locale.getDefault()
+        val date = Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+        val skeleton = if (date.year == LocalDate.now().year) "MMMd" else "yMMMd"
+        date.format(DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, skeleton), locale))
     }
 
     val isCredit = transaction.type == TransactionType.CREDIT
@@ -232,6 +213,7 @@ fun TransactionRowCard(
     }
 
     Card(
+        onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
@@ -290,9 +272,7 @@ fun TransactionRowCard(
                             )
                         }
                         Text(
-                            text = Instant.ofEpochMilli(transaction.timestamp)
-                                .atZone(ZoneId.systemDefault())
-                                .format(dateFormatter),
+                            text = shortDate,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

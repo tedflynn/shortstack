@@ -30,10 +30,6 @@ class TransactionRepository(
         return transactionDao.getTransactionsForKid(kidName)
     }
 
-    fun getRunningBalanceForKid(kidName: String): Flow<Long?> {
-        return transactionDao.getRunningBalanceForKid(kidName)
-    }
-
     fun getCreditTotalsByCategoryForKidInRange(
         kidName: String,
         startTimestamp: Long,

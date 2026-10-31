@@ -34,8 +34,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -43,6 +45,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,7 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.allowancetracker.R
 import com.example.allowancetracker.ui.components.AddKidDialog
-import com.example.allowancetracker.ui.components.AddTransactionBottomSheet
+import com.example.allowancetracker.ui.components.EntryBottomSheet
 import com.example.allowancetracker.ui.components.EditKidsDialog
 import com.example.allowancetracker.ui.components.ManageCategoriesDialog
 import com.example.allowancetracker.ui.theme.EntryButtonNavy
@@ -90,16 +93,14 @@ fun TrackerMainScreen(
     val kids by viewModel.kids.collectAsStateWithLifecycle()
     val selectedKid by viewModel.selectedKid.collectAsStateWithLifecycle()
     val hasNoKids by viewModel.hasNoKids.collectAsStateWithLifecycle()
-    val balanceCents by viewModel.balanceCents.collectAsStateWithLifecycle()
-    val transactions by viewModel.transactions.collectAsStateWithLifecycle()
-    val categoryIncome by viewModel.categoryIncome.collectAsStateWithLifecycle()
-    val categorySpending by viewModel.categorySpending.collectAsStateWithLifecycle()
-    val matchingIncomeCategories by viewModel.matchingIncomeCategories.collectAsStateWithLifecycle()
-    val matchingExpenseCategories by viewModel.matchingExpenseCategories.collectAsStateWithLifecycle()
-    val selectedCategories by viewModel.selectedCategories.collectAsStateWithLifecycle()
+    val ledger by viewModel.ledger.collectAsStateWithLifecycle()
+    val incomeSums by viewModel.incomeSums.collectAsStateWithLifecycle()
+    val spendingSums by viewModel.spendingSums.collectAsStateWithLifecycle()
+    val hiddenCategories by viewModel.hiddenCategories.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val usedCategories by viewModel.usedCategories.collectAsStateWithLifecycle()
     val kidsWithEntries by viewModel.kidsWithEntries.collectAsStateWithLifecycle()
+    val lastCategoryByType by viewModel.lastCategoryByType.collectAsStateWithLifecycle()
     val startDateMillis by viewModel.startDateMillis.collectAsStateWithLifecycle()
     val endDateMillis by viewModel.endDateMillis.collectAsStateWithLifecycle()
 
@@ -111,6 +112,8 @@ fun TrackerMainScreen(
     var overflowExpanded by remember { mutableStateOf(false) }
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(TrackerTab.RUNNING_TALLY.ordinal) }
     var showEntrySheet by rememberSaveable { mutableStateOf(false) }
+    // The id of the entry open for editing; null means the sheet adds a new one.
+    var editingEntryId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val exportBackupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -134,9 +137,12 @@ fun TrackerMainScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.uiMessages.collect { message ->
-            snackbarHostState.showSnackbar(
-                resources.getString(message.resId, *message.args.toTypedArray())
+            val result = snackbarHostState.showSnackbar(
+                message = resources.getString(message.resId, *message.args.toTypedArray()),
+                actionLabel = message.onUndo?.let { resources.getString(R.string.action_undo) },
+                duration = SnackbarDuration.Short
             )
+            if (result == SnackbarResult.ActionPerformed) message.onUndo?.invoke()
         }
     }
 
@@ -292,7 +298,10 @@ fun TrackerMainScreen(
         floatingActionButton = {
             if (selectedKid != null) {
                 ExtendedFloatingActionButton(
-                    onClick = { showEntrySheet = true },
+                    onClick = {
+                        editingEntryId = null
+                        showEntrySheet = true
+                    },
                     expanded = true,
                     containerColor = EntryButtonNavy,
                     contentColor = Color.White,
@@ -323,8 +332,11 @@ fun TrackerMainScreen(
             TrackerTab.RUNNING_TALLY -> {
                 RunningTallyTabContent(
                     kidName = kidName,
-                    balanceCents = balanceCents,
-                    transactions = transactions,
+                    ledger = ledger,
+                    onEditTransaction = { transaction ->
+                        editingEntryId = transaction.id
+                        showEntrySheet = true
+                    },
                     onDeleteTransaction = viewModel::deleteTransaction,
                     modifier = Modifier
                         .fillMaxSize()
@@ -334,12 +346,11 @@ fun TrackerMainScreen(
 
             TrackerTab.INCOME -> {
                 CategoryBreakdownTabContent(
-                    kidName = kidName,
                     kind = BreakdownKind.INCOME,
-                    matchingCategories = matchingIncomeCategories,
-                    selectedCategories = selectedCategories,
+                    allSums = incomeSums,
+                    hiddenCategories = hiddenCategories,
                     onToggleCategory = viewModel::toggleCategorySelection,
-                    categorySums = categoryIncome,
+                    allCategories = categories,
                     startDateMillis = startDateMillis,
                     endDateMillis = endDateMillis,
                     onDateRangeSelected = viewModel::setDateRange,
@@ -351,12 +362,11 @@ fun TrackerMainScreen(
 
             TrackerTab.EXPENSES -> {
                 CategoryBreakdownTabContent(
-                    kidName = kidName,
                     kind = BreakdownKind.EXPENSES,
-                    matchingCategories = matchingExpenseCategories,
-                    selectedCategories = selectedCategories,
+                    allSums = spendingSums,
+                    hiddenCategories = hiddenCategories,
                     onToggleCategory = viewModel::toggleCategorySelection,
-                    categorySums = categorySpending,
+                    allCategories = categories,
                     startDateMillis = startDateMillis,
                     endDateMillis = endDateMillis,
                     onDateRangeSelected = viewModel::setDateRange,
@@ -399,21 +409,50 @@ fun TrackerMainScreen(
     }
 
     val entryKid = selectedKid
-    if (showEntrySheet && entryKid != null) {
-        AddTransactionBottomSheet(
-            kidName = entryKid,
-            categories = categories,
-            onDismiss = { showEntrySheet = false },
-            onSaveTransaction = { title, amountCents, type, category ->
-                viewModel.addTransaction(
-                    title = title,
-                    amountCents = amountCents,
-                    type = type,
-                    category = category
-                )
-                showEntrySheet = false
-            }
-        )
+    // While editing, wait for the entry to be found in the loaded ledger.
+    val editingEntry = editingEntryId?.let { id -> ledger?.transactions?.firstOrNull { it.id == id } }
+    if (showEntrySheet && entryKid != null && (editingEntryId == null || editingEntry != null)) {
+        fun closeSheet() {
+            showEntrySheet = false
+            editingEntryId = null
+        }
+        // Keyed so switching between entries starts the form fresh.
+        key(editingEntryId) {
+            EntryBottomSheet(
+                kidName = entryKid,
+                categories = categories,
+                lastCategoryByType = lastCategoryByType,
+                existing = editingEntry,
+                onDismiss = ::closeSheet,
+                onAddCategory = viewModel::addCategory,
+                onSave = { title, amountCents, type, category, timestamp ->
+                    if (editingEntry == null) {
+                        viewModel.addTransaction(
+                            title = title,
+                            amountCents = amountCents,
+                            type = type,
+                            category = category,
+                            timestamp = timestamp
+                        )
+                    } else {
+                        viewModel.updateTransaction(
+                            editingEntry.copy(
+                                title = title,
+                                amountCents = amountCents,
+                                type = type,
+                                category = category,
+                                timestamp = timestamp
+                            )
+                        )
+                    }
+                    closeSheet()
+                },
+                onDelete = {
+                    editingEntry?.let(viewModel::deleteTransaction)
+                    closeSheet()
+                }
+            )
+        }
     }
 }
 

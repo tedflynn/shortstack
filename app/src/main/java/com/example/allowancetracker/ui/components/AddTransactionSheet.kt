@@ -4,34 +4,56 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.allowancetracker.R
+import com.example.allowancetracker.data.model.Transaction
 import com.example.allowancetracker.data.model.TransactionType
 import com.example.allowancetracker.ui.theme.CreditContainer
 import com.example.allowancetracker.ui.theme.CreditGreen
@@ -39,23 +61,70 @@ import com.example.allowancetracker.ui.theme.DebitContainer
 import com.example.allowancetracker.ui.theme.DebitRed
 import com.example.allowancetracker.ui.theme.OnCreditContainer
 import com.example.allowancetracker.ui.theme.OnDebitContainer
+import com.example.allowancetracker.util.DateRanges
 import com.example.allowancetracker.util.Money
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
+/**
+ * Adds a new entry, or edits [existing] when it's given (which also offers Delete).
+ * [onSave] gets the entry's fields; the caller decides whether to insert or update.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun AddTransactionBottomSheet(
+fun EntryBottomSheet(
     kidName: String,
     categories: List<String>,
+    lastCategoryByType: Map<TransactionType, String>,
+    existing: Transaction?,
     onDismiss: () -> Unit,
-    onSaveTransaction: (title: String, amountCents: Long, type: TransactionType, category: String) -> Unit
+    onAddCategory: (String) -> Unit,
+    onSave: (title: String, amountCents: Long, type: TransactionType, category: String, timestamp: Long) -> Unit,
+    onDelete: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var selectedType by rememberSaveable { mutableStateOf(TransactionType.CREDIT) }
-    val defaultCat = categories.firstOrNull() ?: "Allowance"
-    var selectedCategory by rememberSaveable { mutableStateOf(defaultCat) }
-    var amountInput by rememberSaveable { mutableStateOf("") }
-    var noteInput by rememberSaveable { mutableStateOf("") }
+    val today = remember { LocalDate.now() }
+    var selectedType by rememberSaveable { mutableStateOf(existing?.type ?: TransactionType.CREDIT) }
+    // Suggest the last category used for this type, if it still exists.
+    fun suggestedCategory(type: TransactionType): String? =
+        lastCategoryByType[type]?.takeIf { it in categories }
+    var selectedCategory by rememberSaveable {
+        mutableStateOf(existing?.category ?: suggestedCategory(TransactionType.CREDIT))
+    }
+    // Once the user picks a category (or is editing one), switching type no longer replaces it.
+    var categoryChosenByUser by rememberSaveable { mutableStateOf(existing != null) }
+    var amountInput by rememberSaveable { mutableStateOf(existing?.let { Money.toInput(it.amountCents) } ?: "") }
+    var noteInput by rememberSaveable { mutableStateOf(existing?.title ?: "") }
+    var entryDate by rememberSaveable {
+        mutableStateOf(existing?.let { DateRanges.timestampToLocalDate(it.timestamp) } ?: today)
+    }
     var inputError by remember { mutableStateOf<Int?>(null) }
+    var pickingDate by rememberSaveable { mutableStateOf(false) }
+    var addingCategory by rememberSaveable { mutableStateOf(false) }
+
+    // Shared by the Save button and the keyboard's Done key on the description field.
+    fun trySave() {
+        val parsedCents = Money.parseToCents(amountInput)
+        val category = selectedCategory
+        when {
+            parsedCents == null -> inputError = R.string.entry_amount_error
+            noteInput.isBlank() -> inputError = R.string.entry_note_error
+            category == null -> inputError = R.string.entry_category_error
+            else -> {
+                // Keep the original time of day (or now, for a new entry) on the chosen date.
+                val baseTimestamp = existing?.timestamp ?: System.currentTimeMillis()
+                val timestamp = DateRanges.moveToDate(baseTimestamp, entryDate)
+                onSave(noteInput.trim(), parsedCents, selectedType, category, timestamp)
+            }
+        }
+    }
+
+    // A new entry opens with the cursor in Amount and the number keyboard up.
+    val amountFocus = remember { FocusRequester() }
+    if (existing == null) {
+        LaunchedEffect(Unit) { amountFocus.requestFocus() }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -69,7 +138,10 @@ fun AddTransactionBottomSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = stringResource(R.string.entry_title, kidName),
+                text = stringResource(
+                    if (existing == null) R.string.entry_title else R.string.entry_edit_title,
+                    kidName
+                ),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -86,6 +158,7 @@ fun AddTransactionBottomSheet(
                         selected = selectedType == type,
                         onClick = {
                             selectedType = type
+                            if (!categoryChosenByUser) selectedCategory = suggestedCategory(type)
                         },
                         shape = SegmentedButtonDefaults.itemShape(
                             index = index,
@@ -123,8 +196,13 @@ fun AddTransactionBottomSheet(
                 label = { Text(stringResource(R.string.entry_amount_label)) },
                 placeholder = { Text(stringResource(R.string.entry_amount_hint)) },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth()
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Next
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(amountFocus)
             )
 
             OutlinedTextField(
@@ -144,8 +222,35 @@ fun AddTransactionBottomSheet(
                     )
                 },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(onDone = { trySave() }),
                 modifier = Modifier.fillMaxWidth()
             )
+
+            OutlinedButton(
+                onClick = { pickingDate = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DateRange,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(
+                        R.string.entry_date,
+                        if (entryDate == today) {
+                            stringResource(R.string.entry_date_today)
+                        } else {
+                            entryDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+                        }
+                    )
+                )
+            }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -157,13 +262,33 @@ fun AddTransactionBottomSheet(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    categories.forEach { category ->
+                    // Show a just-added category right away, before the saved list catches up.
+                    val chipCategories = selectedCategory
+                        ?.takeIf { picked -> categories.none { it.equals(picked, ignoreCase = true) } }
+                        ?.let { categories + it }
+                        ?: categories
+                    chipCategories.forEach { category ->
                         FilterChip(
                             selected = selectedCategory == category,
-                            onClick = { selectedCategory = category },
+                            onClick = {
+                                selectedCategory = category
+                                categoryChosenByUser = true
+                                inputError = null
+                            },
                             label = { Text(category) }
                         )
                     }
+                    AssistChip(
+                        onClick = { addingCategory = true },
+                        label = { Text(stringResource(R.string.entry_new_category)) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(AssistChipDefaults.IconSize)
+                            )
+                        }
+                    )
                 }
             }
 
@@ -176,25 +301,7 @@ fun AddTransactionBottomSheet(
             }
 
             Button(
-                onClick = {
-                    val parsedCents = Money.parseToCents(amountInput)
-                    when {
-                        parsedCents == null -> {
-                            inputError = R.string.entry_amount_error
-                        }
-                        noteInput.isBlank() -> {
-                            inputError = R.string.entry_note_error
-                        }
-                        else -> {
-                            onSaveTransaction(
-                                noteInput.trim(),
-                                parsedCents,
-                                selectedType,
-                                selectedCategory
-                            )
-                        }
-                    }
-                },
+                onClick = { trySave() },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (selectedType == TransactionType.CREDIT) CreditGreen else DebitRed
@@ -206,6 +313,110 @@ fun AddTransactionBottomSheet(
                     fontWeight = FontWeight.Bold
                 )
             }
+
+            if (existing != null) {
+                TextButton(
+                    onClick = onDelete,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.entry_delete),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
         }
     }
+
+    if (pickingDate) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = DateRanges.localDateToPickerMillis(entryDate),
+            // No future dates: an entry records something that already happened.
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                    !DateRanges.pickerMillisToLocalDate(utcTimeMillis).isAfter(today)
+
+                override fun isSelectableYear(year: Int): Boolean = year <= today.year
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { pickingDate = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.let {
+                            entryDate = DateRanges.pickerMillisToLocalDate(it)
+                        }
+                        pickingDate = false
+                    }
+                ) {
+                    Text(stringResource(R.string.action_apply))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pickingDate = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+
+    if (addingCategory) {
+        NewCategoryDialog(
+            onDismiss = { addingCategory = false },
+            onConfirm = { name ->
+                val match = categories.firstOrNull { it.equals(name, ignoreCase = true) }
+                if (match == null) onAddCategory(name)
+                selectedCategory = match ?: name
+                categoryChosenByUser = true
+                inputError = null
+                addingCategory = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun NewCategoryDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var nameInput by rememberSaveable { mutableStateOf("") }
+    fun confirm() {
+        if (nameInput.isNotBlank()) onConfirm(nameInput.trim())
+    }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.manage_categories_new), fontWeight = FontWeight.Bold) },
+        text = {
+            OutlinedTextField(
+                value = nameInput,
+                onValueChange = { nameInput = it },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Words,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(onDone = { confirm() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focus)
+            )
+        },
+        confirmButton = {
+            Button(onClick = { confirm() }, enabled = nameInput.isNotBlank()) {
+                Text(stringResource(R.string.action_add))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
+    )
 }

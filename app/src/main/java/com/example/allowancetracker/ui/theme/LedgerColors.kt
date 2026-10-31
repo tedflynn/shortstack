@@ -37,3 +37,20 @@ val CreditContainer = Emerald100
 val OnCreditContainer = Emerald900
 val DebitContainer = Red100
 val OnDebitContainer = Red900
+
+/**
+ * Chart colors, handed out to categories in list order. Neighbors contrast,
+ * and none is close to the income green or expense red.
+ */
+val CategoryPalette = listOf(
+    Color(0xFF0F766E), // teal-700
+    Color(0xFFD97706), // amber-600
+    Color(0xFF2563EB), // blue-600
+    Color(0xFFDB2777), // pink-600
+    Color(0xFF7C3AED), // violet-600
+    Color(0xFFEA580C), // orange-600
+    Color(0xFF0891B2), // cyan-600
+    Color(0xFF4F46E5), // indigo-600
+    Color(0xFF65A30D), // lime-600
+    Color(0xFF475569)  // slate-600
+)

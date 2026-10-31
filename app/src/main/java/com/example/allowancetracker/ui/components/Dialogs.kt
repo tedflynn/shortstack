@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -29,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.example.allowancetracker.R
 
@@ -41,6 +45,12 @@ fun ManageCategoriesDialog(
     onDismiss: () -> Unit
 ) {
     var newCategoryInput by rememberSaveable { mutableStateOf("") }
+    fun addCategory() {
+        if (newCategoryInput.isNotBlank()) {
+            onAddCategory(newCategoryInput.trim())
+            newCategoryInput = ""
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -57,16 +67,14 @@ fun ManageCategoriesDialog(
                         onValueChange = { newCategoryInput = it },
                         label = { Text(stringResource(R.string.manage_categories_new)) },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Words,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { addCategory() }),
                         modifier = Modifier.weight(1f)
                     )
-                    Button(
-                        onClick = {
-                            if (newCategoryInput.isNotBlank()) {
-                                onAddCategory(newCategoryInput.trim())
-                                newCategoryInput = ""
-                            }
-                        }
-                    ) {
+                    Button(onClick = { addCategory() }) {
                         Text(stringResource(R.string.action_add))
                     }
                 }
@@ -131,6 +139,13 @@ fun AddKidDialog(
 ) {
     var nameInput by rememberSaveable { mutableStateOf("") }
     var nameError by remember { mutableStateOf<Int?>(null) }
+    fun confirm() {
+        if (nameInput.isBlank()) {
+            nameError = R.string.add_kid_name_error
+        } else {
+            onConfirmKid(nameInput.trim())
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -146,6 +161,11 @@ fun AddKidDialog(
                     label = { Text(stringResource(R.string.add_kid_name_label)) },
                     placeholder = { Text(stringResource(R.string.add_kid_name_hint)) },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { confirm() }),
                     modifier = Modifier.fillMaxWidth()
                 )
                 nameError?.let { errorRes ->
@@ -158,15 +178,7 @@ fun AddKidDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    if (nameInput.isBlank()) {
-                        nameError = R.string.add_kid_name_error
-                    } else {
-                        onConfirmKid(nameInput.trim())
-                    }
-                }
-            ) {
+            Button(onClick = { confirm() }) {
                 Text(stringResource(R.string.add_kid_confirm))
             }
         },
@@ -188,6 +200,12 @@ fun EditKidsDialog(
     onDismiss: () -> Unit
 ) {
     var newKidInput by rememberSaveable { mutableStateOf("") }
+    fun addKid() {
+        if (newKidInput.isNotBlank()) {
+            onAddKid(newKidInput.trim())
+            newKidInput = ""
+        }
+    }
     var pendingRemoval by rememberSaveable { mutableStateOf<String?>(null) }
 
     pendingRemoval?.let { kidName ->
@@ -228,16 +246,14 @@ fun EditKidsDialog(
                         onValueChange = { newKidInput = it },
                         label = { Text(stringResource(R.string.add_kid_name_label)) },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Words,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { addKid() }),
                         modifier = Modifier.weight(1f)
                     )
-                    Button(
-                        onClick = {
-                            if (newKidInput.isNotBlank()) {
-                                onAddKid(newKidInput.trim())
-                                newKidInput = ""
-                            }
-                        }
-                    ) {
+                    Button(onClick = { addKid() }) {
                         Text(stringResource(R.string.action_add))
                     }
                 }

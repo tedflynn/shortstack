@@ -3,8 +3,10 @@ package com.example.allowancetracker.ui.components
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,64 +38,37 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.allowancetracker.data.local.CategorySum
-import androidx.compose.ui.res.stringResource
 import com.example.allowancetracker.R
+import com.example.allowancetracker.data.local.CategorySum
+import com.example.allowancetracker.ui.theme.CategoryPalette
 import com.example.allowancetracker.util.Money
 import com.example.allowancetracker.util.Percentages
 
-@Composable
-fun rememberCategoryColorMap(): Map<String, Color> {
-    val scheme = MaterialTheme.colorScheme
-    return remember(scheme) {
-        mapOf(
-            "Allowance" to Color(0xFF2E7D32),
-            "Gift" to Color(0xFF00897B),
-            "Job" to Color(0xFF0277BD),
-            "Video Game" to Color(0xFF3949AB),
-            "Toy" to Color(0xFF6A1B9A),
-            "Book" to Color(0xFF1565C0),
-            "Snack" to Color(0xFFE65100),
-            "Other" to Color(0xFF546E7A)
-        )
-    }
-}
-
-fun getCategoryColor(
-    category: String,
-    colorMap: Map<String, Color>,
-    fallbackPalette: List<Color>
-): Color {
-    return colorMap[category] ?: fallbackPalette[
-        (category.hashCode() and Int.MAX_VALUE) % fallbackPalette.size
-    ]
+/**
+ * Gives each category a steady color from its place in [allCategories], so it
+ * looks the same on both tabs and whatever the date range.
+ */
+fun categoryColor(category: String, allCategories: List<String>): Color {
+    val index = allCategories.indexOfFirst { it.equals(category, ignoreCase = true) }
+    val slot = if (index >= 0) index else category.lowercase().hashCode() and Int.MAX_VALUE
+    return CategoryPalette[slot % CategoryPalette.size]
 }
 
 @Composable
 fun CategoryDonutChart(
     categorySpending: List<CategorySum>,
+    colorFor: (String) -> Color,
     modifier: Modifier = Modifier,
     totalLabel: String,
     emptyLabel: String,
     chartSize: Dp = 148.dp,
     strokeWidth: Dp = 22.dp
 ) {
-    val colorMap = rememberCategoryColorMap()
-    val scheme = MaterialTheme.colorScheme
-    val fallbackPalette = remember(scheme) {
-        listOf(
-            scheme.primary,
-            scheme.secondary,
-            scheme.tertiary,
-            scheme.error,
-            scheme.primaryContainer,
-            scheme.secondaryContainer
-        )
-    }
-
     val totalSpending = remember(categorySpending) {
         categorySpending.sumOf { it.totalCents }.coerceAtLeast(0L)
     }
@@ -138,10 +114,9 @@ fun CategoryDonutChart(
                     val proportion = item.totalCents.toFloat() / totalSpending
                     val rawSweep = proportion * 360f * animatedProgress
                     val adjustedSweep = (rawSweep - gapDegrees).coerceAtLeast(1f)
-                    val segmentColor = getCategoryColor(item.category, colorMap, fallbackPalette)
 
                     drawArc(
-                        color = segmentColor,
+                        color = colorFor(item.category),
                         startAngle = currentStartAngle + (gapDegrees / 2f),
                         sweepAngle = adjustedSweep,
                         useCenter = false,
@@ -187,30 +162,20 @@ fun CategoryDonutChart(
     }
 }
 
+/**
+ * Lists every category in the range. Tapping one hides it from the chart (or
+ * shows it again); hidden ones stay listed, struck through, without a percentage.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CategoryLegend(
-    categorySpending: List<CategorySum>,
+    allSums: List<CategorySum>,
+    hiddenCategories: Set<String>,
+    onToggleCategory: (String) -> Unit,
+    colorFor: (String) -> Color,
     modifier: Modifier = Modifier
 ) {
-    val colorMap = rememberCategoryColorMap()
-    val scheme = MaterialTheme.colorScheme
-    val fallbackPalette = remember(scheme) {
-        listOf(
-            scheme.primary,
-            scheme.secondary,
-            scheme.tertiary,
-            scheme.error,
-            scheme.primaryContainer,
-            scheme.secondaryContainer
-        )
-    }
-
-    val totalSpending = remember(categorySpending) {
-        categorySpending.sumOf { it.totalCents }.coerceAtLeast(0L)
-    }
-
-    if (categorySpending.isEmpty() || totalSpending <= 0L) {
+    if (allSums.isEmpty()) {
         Text(
             text = stringResource(R.string.chart_legend_empty),
             style = MaterialTheme.typography.bodySmall,
@@ -220,45 +185,80 @@ fun CategoryLegend(
         return
     }
 
-    FlowRow(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        val percentages = Percentages.of(categorySpending.map { it.totalCents })
-        categorySpending.forEachIndexed { index, item ->
-            val percentage = percentages[index]
-            val dotColor = getCategoryColor(item.category, colorMap, fallbackPalette)
+    val isShown = { sum: CategorySum -> sum.category.lowercase() !in hiddenCategories }
+    val shownSums = allSums.filter(isShown)
+    val percentages = Percentages.of(shownSums.map { it.totalCents })
+    val percentageFor = shownSums.map { it.category }.zip(percentages).toMap()
 
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            allSums.forEach { item ->
+                val shown = isShown(item)
+                val dotColor = colorFor(item.category)
+
+                Surface(
+                    checked = shown,
+                    onCheckedChange = { onToggleCategory(item.category) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (shown) {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    } else {
+                        Color.Transparent
+                    },
+                    border = if (shown) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(dotColor)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = item.category,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = stringResource(R.string.chart_legend_item, Money.format(item.totalCents), percentage),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .then(
+                                    if (shown) {
+                                        Modifier.background(dotColor)
+                                    } else {
+                                        Modifier.border(1.5.dp, dotColor, CircleShape)
+                                    }
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = item.category,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (shown) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            textDecoration = if (shown) null else TextDecoration.LineThrough
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = percentageFor[item.category]?.let { percentage ->
+                                stringResource(R.string.chart_legend_item, Money.format(item.totalCents), percentage)
+                            } ?: Money.format(item.totalCents),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = stringResource(R.string.chart_legend_tap_hint),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

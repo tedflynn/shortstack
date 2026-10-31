@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -24,7 +23,6 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,7 +37,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,80 +44,58 @@ import com.example.allowancetracker.R
 import com.example.allowancetracker.data.local.CategorySum
 import com.example.allowancetracker.ui.components.CategoryDonutChart
 import com.example.allowancetracker.ui.components.CategoryLegend
-import com.example.allowancetracker.ui.components.getCategoryColor
-import com.example.allowancetracker.ui.components.rememberCategoryColorMap
-import com.example.allowancetracker.ui.theme.CreditGreen
-import com.example.allowancetracker.ui.theme.DebitRed
+import com.example.allowancetracker.ui.components.categoryColor
 import com.example.allowancetracker.util.DateRanges
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 /** Which side of the ledger a breakdown tab shows, with its labels. */
 enum class BreakdownKind(
-    val accentColor: Color,
-    @StringRes val titleRes: Int,
-    @StringRes val chartTitleRes: Int,
-    @StringRes val rangeHintRes: Int,
-    @StringRes val categoriesTitleRes: Int,
-    @StringRes val noMatchRes: Int,
     @StringRes val allRecordedRes: Int,
     @StringRes val totalRes: Int,
     @StringRes val emptyRes: Int
 ) {
     INCOME(
-        accentColor = CreditGreen,
-        titleRes = R.string.tab_income,
-        chartTitleRes = R.string.breakdown_income_chart_title,
-        rangeHintRes = R.string.breakdown_income_range_hint,
-        categoriesTitleRes = R.string.breakdown_income_categories,
-        noMatchRes = R.string.breakdown_income_no_match,
         allRecordedRes = R.string.breakdown_income_all_recorded,
         totalRes = R.string.breakdown_income_total,
         emptyRes = R.string.breakdown_income_empty
     ),
     EXPENSES(
-        accentColor = DebitRed,
-        titleRes = R.string.tab_expenses,
-        chartTitleRes = R.string.breakdown_expenses_chart_title,
-        rangeHintRes = R.string.breakdown_expenses_range_hint,
-        categoriesTitleRes = R.string.breakdown_expenses_categories,
-        noMatchRes = R.string.breakdown_expenses_no_match,
         allRecordedRes = R.string.breakdown_expenses_all_recorded,
         totalRes = R.string.breakdown_expenses_total,
         emptyRes = R.string.breakdown_expenses_empty
     )
 }
 
+private val PresetLabels = mapOf(
+    DateRanges.Preset.THIS_MONTH to R.string.breakdown_preset_this_month,
+    DateRanges.Preset.LAST_MONTH to R.string.breakdown_preset_last_month,
+    DateRanges.Preset.THIS_YEAR to R.string.breakdown_preset_this_year,
+    DateRanges.Preset.ALL_TIME to R.string.breakdown_preset_all_time
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CategoryBreakdownTabContent(
-    kidName: String,
     kind: BreakdownKind,
-    matchingCategories: List<String>,
-    selectedCategories: Set<String>,
+    allSums: List<CategorySum>,
+    hiddenCategories: Set<String>,
     onToggleCategory: (String) -> Unit,
-    categorySums: List<CategorySum>,
+    allCategories: List<String>,
     startDateMillis: Long?,
     endDateMillis: Long?,
     onDateRangeSelected: (Long?, Long?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val accentColor = kind.accentColor
     var pickingStartDate by rememberSaveable { mutableStateOf(false) }
     var pickingEndDate by rememberSaveable { mutableStateOf(false) }
 
-    val colorMap = rememberCategoryColorMap()
-    val scheme = MaterialTheme.colorScheme
-    val fallbackPalette = remember(scheme) {
-        listOf(
-            scheme.primary,
-            scheme.secondary,
-            scheme.tertiary,
-            scheme.error,
-            scheme.primaryContainer,
-            scheme.secondaryContainer
-        )
+    val colorFor = remember(allCategories) { { category: String -> categoryColor(category, allCategories) } }
+    val shownSums = remember(allSums, hiddenCategories) {
+        allSums.filter { it.category.lowercase() !in hiddenCategories }
     }
+    val today = remember { LocalDate.now() }
 
     LazyColumn(
         modifier = modifier,
@@ -146,27 +121,23 @@ fun CategoryBreakdownTabContent(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
+                    Text(
+                        text = stringResource(R.string.breakdown_range_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column {
-                            Text(
-                                text = stringResource(R.string.breakdown_range_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                        DateRanges.Preset.entries.forEach { preset ->
+                            val range = DateRanges.presetRange(preset, today)
+                            FilterChip(
+                                selected = range == (startDateMillis to endDateMillis),
+                                onClick = { onDateRangeSelected(range.first, range.second) },
+                                label = { Text(stringResource(PresetLabels.getValue(preset))) }
                             )
-                            Text(
-                                text = stringResource(kind.rangeHintRes, kidName),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (startDateMillis != null || endDateMillis != null) {
-                            TextButton(onClick = { onDateRangeSelected(null, null) }) {
-                                Text(stringResource(R.string.breakdown_range_reset))
-                            }
                         }
                     }
 
@@ -210,80 +181,6 @@ fun CategoryBreakdownTabContent(
             }
         }
 
-        item(key = "matching_categories_card") {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = stringResource(kind.categoriesTitleRes),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = accentColor
-                    )
-                    if (matchingCategories.isEmpty()) {
-                        Text(
-                            text = stringResource(kind.noMatchRes),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            matchingCategories.forEach { cat ->
-                                val isSelected = selectedCategories.any {
-                                    it.equals(cat, ignoreCase = true)
-                                }
-                                val chipColor = getCategoryColor(cat, colorMap, fallbackPalette)
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { onToggleCategory(cat) },
-                                    label = { Text(text = cat) },
-                                    leadingIcon = if (isSelected) {
-                                        {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = stringResource(R.string.cd_selected),
-                                                modifier = Modifier.size(FilterChipDefaults.IconSize)
-                                            )
-                                        }
-                                    } else {
-                                        null
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        containerColor = Color.Transparent,
-                                        labelColor = chipColor,
-                                        selectedContainerColor = chipColor,
-                                        selectedLabelColor = Color.White,
-                                        selectedLeadingIconColor = Color.White
-                                    ),
-                                    border = FilterChipDefaults.filterChipBorder(
-                                        enabled = true,
-                                        selected = isSelected,
-                                        borderColor = chipColor,
-                                        selectedBorderColor = chipColor
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         item(key = "donut_chart_card") {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -300,32 +197,26 @@ fun CategoryBreakdownTabContent(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = stringResource(kind.chartTitleRes, kidName),
+                        text = dateRangeSubtitle(startDateMillis, endDateMillis, kind),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = dateRangeSubtitle(startDateMillis, endDateMillis, kind),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(kind.titleRes),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = accentColor
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
                     CategoryDonutChart(
-                        categorySpending = categorySums,
+                        categorySpending = shownSums,
+                        colorFor = colorFor,
                         totalLabel = stringResource(kind.totalRes),
                         emptyLabel = stringResource(kind.emptyRes),
                         chartSize = 156.dp,
                         strokeWidth = 22.dp
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    CategoryLegend(categorySpending = categorySums)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    CategoryLegend(
+                        allSums = allSums,
+                        hiddenCategories = hiddenCategories,
+                        onToggleCategory = onToggleCategory,
+                        colorFor = colorFor
+                    )
                 }
             }
         }

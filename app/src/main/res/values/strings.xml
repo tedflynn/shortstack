@@ -6,11 +6,11 @@
     <string name="kid_menu_none">Add kid</string>
     <string name="cd_select_kid">Select kid</string>
     <string name="cd_selected">Selected</string>
-    <string name="menu_edit_kids">Edit Kids</string>
+    <string name="menu_edit_kids">Edit kids</string>
     <string name="cd_more_options">More options</string>
-    <string name="menu_export_backup">Export Backup to Drive</string>
-    <string name="menu_restore_backup">Restore Backup</string>
-    <string name="menu_manage_categories">Manage Categories</string>
+    <string name="menu_export_backup">Export backup…</string>
+    <string name="menu_restore_backup">Restore backup…</string>
+    <string name="menu_manage_categories">Manage categories</string>
     <string name="tab_ledger">Ledger</string>
     <string name="tab_income">Income</string>
     <string name="tab_expenses">Expenses</string>
@@ -23,6 +23,7 @@
     <string name="action_delete">Delete</string>
     <string name="action_done">Done</string>
     <string name="action_remove">Remove</string>
+    <string name="action_undo">Undo</string>
     <string name="cd_delete_item">Delete %1$s</string>
     <string name="cd_delete_entry">Delete entry</string>
 
@@ -32,70 +33,70 @@
     <string name="welcome_add_kid">Add a kid</string>
 
     <!-- Add kid dialog -->
-    <string name="add_kid_title">Add Kid Profile</string>
-    <string name="add_kid_name_label">Kid\'s Name</string>
+    <string name="add_kid_title">Add kid</string>
+    <string name="add_kid_name_label">Kid\'s name</string>
     <string name="add_kid_name_hint">e.g., Leo, Sam…</string>
     <string name="add_kid_name_error">Please enter a name.</string>
-    <string name="add_kid_confirm">Add Kid</string>
+    <string name="add_kid_confirm">Add kid</string>
 
     <!-- Edit kids dialog -->
-    <string name="edit_kids_title">Edit Kids</string>
+    <string name="edit_kids_title">Edit kids</string>
     <string name="kid_has_entries">Has entries</string>
     <string name="kid_no_entries">No entries</string>
     <string name="remove_kid_title">Remove %1$s?</string>
     <string name="remove_kid_body">Removing %1$s will remove all entries associated with them and cannot be undone. Do you really want to do this?</string>
 
     <!-- Categories -->
-    <string name="manage_categories_title">Manage Categories</string>
-    <string name="manage_categories_new">New Category</string>
+    <string name="manage_categories_title">Manage categories</string>
+    <string name="manage_categories_new">New category</string>
     <string name="category_in_use">In use</string>
     <string name="category_unused">Unused</string>
 
     <!-- Ledger tab -->
-    <string name="balance_title">%1$s\'s Balance</string>
-    <string name="delete_entry_title">Delete entry?</string>
-    <string name="delete_entry_body">\"%1$s\" (%2$s) will be permanently removed.</string>
-    <string name="empty_ledger_title">No transactions recorded yet</string>
+    <string name="balance_title">%1$s\'s balance</string>
+    <string name="empty_ledger_title">No entries yet</string>
     <string name="empty_ledger_hint">Tap \'+ Entry\' below to add an entry.</string>
 
     <!-- Income and expenses tabs -->
-    <string name="breakdown_range_title">Summary Date Range</string>
-    <string name="breakdown_range_reset">Reset All</string>
-    <string name="breakdown_start_date">Start Date</string>
-    <string name="breakdown_end_date">End Date</string>
+    <string name="breakdown_range_title">Summary date range</string>
+    <string name="breakdown_preset_this_month">This month</string>
+    <string name="breakdown_preset_last_month">Last month</string>
+    <string name="breakdown_preset_this_year">This year</string>
+    <string name="breakdown_preset_all_time">All time</string>
+    <string name="breakdown_start_date">Start date</string>
+    <string name="breakdown_end_date">End date</string>
     <string name="breakdown_range_beginning">Beginning</string>
     <string name="breakdown_range_today">Today</string>
     <string name="breakdown_range">%1$s – %2$s</string>
-    <string name="breakdown_income_chart_title">%1$s\'s Income</string>
-    <string name="breakdown_income_range_hint">Select start and end dates for %1$s\'s income</string>
-    <string name="breakdown_income_categories">Income Categories</string>
-    <string name="breakdown_income_no_match">No matching income categories in this date range</string>
     <string name="breakdown_income_all_recorded">All recorded income</string>
-    <string name="breakdown_income_total">Total Income</string>
-    <string name="breakdown_income_empty">No Income</string>
-    <string name="breakdown_expenses_chart_title">%1$s\'s Expenses</string>
-    <string name="breakdown_expenses_range_hint">Select start and end dates for %1$s\'s expenses</string>
-    <string name="breakdown_expenses_categories">Expenses Categories</string>
-    <string name="breakdown_expenses_no_match">No matching expenses categories in this date range</string>
+    <string name="breakdown_income_total">Total income</string>
+    <string name="breakdown_income_empty">No income</string>
     <string name="breakdown_expenses_all_recorded">All recorded expenses</string>
-    <string name="breakdown_expenses_total">Total Expenses</string>
-    <string name="breakdown_expenses_empty">No Expenses</string>
+    <string name="breakdown_expenses_total">Total expenses</string>
+    <string name="breakdown_expenses_empty">No expenses</string>
     <string name="chart_legend_empty">No entries in this date range yet.</string>
     <string name="chart_legend_item">%1$s (%2$d%%)</string>
+    <string name="chart_legend_tap_hint">Tap a category to hide or show it</string>
 
     <!-- New entry sheet -->
-    <string name="entry_title">New Entry for %1$s</string>
+    <string name="entry_title">New entry for %1$s</string>
+    <string name="entry_edit_title">Edit entry for %1$s</string>
     <string name="entry_type_income">Income</string>
     <string name="entry_type_expense">Expense</string>
     <string name="entry_amount_label">Amount ($)</string>
     <string name="entry_amount_hint">0.00</string>
-    <string name="entry_note_label">Item Note / Description</string>
+    <string name="entry_note_label">Description</string>
     <string name="entry_note_hint_income">Weekly allowance, Birthday gift, Lawn mowing…</string>
     <string name="entry_note_hint_expense">Video game, Lego set, Book…</string>
     <string name="entry_category_label">Category</string>
+    <string name="entry_new_category">New</string>
+    <string name="entry_date">Date: %1$s</string>
+    <string name="entry_date_today">Today</string>
     <string name="entry_amount_error">Please enter an amount between %1$s and %2$s.</string>
-    <string name="entry_note_error">Please enter a note for this transaction.</string>
-    <string name="entry_save">Save Entry</string>
+    <string name="entry_category_error">Please choose a category.</string>
+    <string name="entry_note_error">Please enter a description.</string>
+    <string name="entry_save">Save entry</string>
+    <string name="entry_delete">Delete entry</string>
 
     <!-- Snackbar messages -->
     <string name="message_switched_kid">Switched to %1$s\'s ledger</string>

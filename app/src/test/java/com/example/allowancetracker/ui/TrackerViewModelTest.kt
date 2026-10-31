@@ -106,13 +106,13 @@ class TrackerViewModelTest {
         // A new ViewModel stands in for the app being restarted.
         val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
 
-        vm.categorySpending.awaitValue { sums -> sums.map { it.category } == listOf("Snacks") }
-        vm.selectedCategories.awaitValue { it == setOf("Snacks") }
+        vm.spendingSums.awaitValue { sums -> sums.map { it.category } == listOf("Snacks") }
+        assertEquals(emptySet<String>(), vm.hiddenCategories.value)
 
-        vm.toggleCategorySelection("snacks")
-        vm.categorySpending.awaitValue { it.isEmpty() }
         vm.toggleCategorySelection("Snacks")
-        vm.categorySpending.awaitValue { it.size == 1 }
+        vm.hiddenCategories.awaitValue { it == setOf("snacks") }
+        vm.toggleCategorySelection("snacks")
+        vm.hiddenCategories.awaitValue { it.isEmpty() }
         Unit
     }
 
@@ -135,5 +135,75 @@ class TrackerViewModelTest {
         assertEquals(UiMessage(R.string.message_kid_removed, listOf("Sam")), message.await())
         vm.kids.awaitValue { it == listOf("Ada") }
         assertEquals(listOf("Ada"), repository.allTransactions.first().map { it.kidName })
+    }
+
+    @Test
+    fun suggestsMostRecentCategoryPerType() = runBlocking {
+        val vm = TrackerViewModel(repository, FakeStore())
+        vm.lastCategoryByType.awaitValue { it.isEmpty() }
+
+        repository.insertTransaction(
+            Transaction(kidName = "Sam", title = "Allowance", amountCents = 500, type = TransactionType.CREDIT, category = "Allowance", timestamp = 1_000)
+        )
+        repository.insertTransaction(
+            Transaction(kidName = "Sam", title = "Lego", amountCents = 900, type = TransactionType.DEBIT, category = "Toy", timestamp = 2_000)
+        )
+        repository.insertTransaction(
+            Transaction(kidName = "Ada", title = "Comic", amountCents = 300, type = TransactionType.DEBIT, category = "Book", timestamp = 3_000)
+        )
+
+        vm.lastCategoryByType.awaitValue {
+            it == mapOf(TransactionType.CREDIT to "Allowance", TransactionType.DEBIT to "Book")
+        }
+        Unit
+    }
+
+    @Test
+    fun ledgerIsNullUntilLoadedThenHasBalanceAndEntries() = runBlocking {
+        repository.insertTransaction(
+            Transaction(kidName = "Sam", title = "Allowance", amountCents = 500, type = TransactionType.CREDIT)
+        )
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
+        assertEquals(null, vm.ledger.value)
+
+        val ledger = vm.ledger.awaitValue { it != null }!!
+        assertEquals(500L, ledger.balanceCents)
+        assertEquals(listOf("Allowance"), ledger.transactions.map { it.title })
+    }
+
+    @Test
+    fun editingAnEntryKeepsItsIdAndUpdatesBalance() = runBlocking {
+        repository.insertTransaction(
+            Transaction(kidName = "Sam", title = "Allowance", amountCents = 500, type = TransactionType.CREDIT)
+        )
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
+        val original = vm.ledger.awaitValue { it != null }!!.transactions.single()
+
+        vm.updateTransaction(original.copy(title = "Chores", amountCents = 750))
+        val edited = vm.ledger.awaitValue { it?.balanceCents == 750L }!!.transactions.single()
+        assertEquals(original.id, edited.id)
+        assertEquals("Chores", edited.title)
+    }
+
+    @Test
+    fun undoRestoresDeletedEntry() = runBlocking {
+        repository.insertTransaction(
+            Transaction(kidName = "Sam", title = "Comic", amountCents = 300, type = TransactionType.DEBIT)
+        )
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
+        val entry = vm.ledger.awaitValue { it != null }!!.transactions.single()
+
+        val message = async(start = CoroutineStart.UNDISPATCHED) {
+            vm.uiMessages.awaitValue { true }
+        }
+        vm.deleteTransaction(entry)
+        val deleted = message.await()
+        assertEquals(R.string.message_entry_deleted, deleted.resId)
+        vm.ledger.awaitValue { it?.transactions?.isEmpty() == true }
+
+        deleted.onUndo!!.invoke()
+        val restored = vm.ledger.awaitValue { it?.transactions?.size == 1 }!!
+        assertEquals(entry, restored.transactions.single())
+        assertEquals(-300L, restored.balanceCents)
     }
 }

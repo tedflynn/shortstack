@@ -39,6 +39,9 @@ object Money {
             .movePointRight(2)
             .longValueExact()
 
+    /** Plain text for an amount field, e.g. 500 -> "5.00". */
+    fun toInput(cents: Long): String = BigDecimal.valueOf(cents, 2).toPlainString()
+
     fun format(cents: Long): String =
         NumberFormat.getCurrencyInstance(Locale.US).format(BigDecimal.valueOf(cents, 2))
 }
