@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.allowancetracker.data.local.CategorySum
 import com.example.allowancetracker.util.Money
+import com.example.allowancetracker.util.Percentages
 
 @Composable
 fun rememberCategoryColorMap(): Map<String, Color> {
@@ -222,12 +223,9 @@ fun CategoryLegend(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        categorySpending.forEach { item ->
-            val percentage = if (totalSpending > 0L) {
-                (item.totalCents * 100 / totalSpending).toInt()
-            } else {
-                0
-            }
+        val percentages = Percentages.of(categorySpending.map { it.totalCents })
+        categorySpending.forEachIndexed { index, item ->
+            val percentage = percentages[index]
             val dotColor = getCategoryColor(item.category, colorMap, fallbackPalette)
 
             Surface(
