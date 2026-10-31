@@ -8,9 +8,10 @@
     <string name="cd_selected">Selected</string>
     <string name="menu_add_kid">+ Kid</string>
     <string name="menu_remove_kid">Remove %1$s</string>
-    <string name="cd_backup_options">Backup options</string>
+    <string name="cd_more_options">More options</string>
     <string name="menu_export_backup">Export Backup to Drive</string>
     <string name="menu_restore_backup">Restore Backup</string>
+    <string name="menu_manage_categories">Manage Categories</string>
     <string name="tab_ledger">Ledger</string>
     <string name="tab_income">Income</string>
     <string name="tab_expenses">Expenses</string>
@@ -38,8 +39,6 @@
     <string name="add_kid_confirm">Add Kid</string>
 
     <!-- Categories -->
-    <string name="filter_all">All</string>
-    <string name="filter_manage">+/-</string>
     <string name="manage_categories_title">Manage Categories</string>
     <string name="manage_categories_new">New Category</string>
     <string name="category_in_use">In use</string>
@@ -50,7 +49,6 @@
     <string name="delete_entry_title">Delete entry?</string>
     <string name="delete_entry_body">\"%1$s\" (%2$s) will be permanently removed.</string>
     <string name="empty_ledger_title">No transactions recorded yet</string>
-    <string name="empty_ledger_filtered">No transactions in \"%1$s\"</string>
     <string name="empty_ledger_hint">Tap \'+ Entry\' below to add an entry.</string>
 
     <!-- Income and expenses tabs -->

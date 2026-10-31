@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.Color
 private val LedgerColorScheme = lightColorScheme(
     primary = Teal800,
     onPrimary = Color.White,
-    // The balance card: dark teal with white text.
+    // Dark teal container with white text.
     primaryContainer = Teal900,
     onPrimaryContainer = Color.White,
     secondary = Teal700,

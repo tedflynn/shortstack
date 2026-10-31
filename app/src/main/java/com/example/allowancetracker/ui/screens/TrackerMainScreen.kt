@@ -95,9 +95,7 @@ fun TrackerMainScreen(
     val matchingExpenseCategories by viewModel.matchingExpenseCategories.collectAsStateWithLifecycle()
     val selectedCategories by viewModel.selectedCategories.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
-    val filterBarCategories by viewModel.filterBarCategories.collectAsStateWithLifecycle()
     val usedCategories by viewModel.usedCategories.collectAsStateWithLifecycle()
-    val selectedFilterTag by viewModel.selectedFilterTag.collectAsStateWithLifecycle()
     val startDateMillis by viewModel.startDateMillis.collectAsStateWithLifecycle()
     val endDateMillis by viewModel.endDateMillis.collectAsStateWithLifecycle()
 
@@ -240,7 +238,7 @@ fun TrackerMainScreen(
                         IconButton(onClick = { overflowExpanded = true }) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
-                                contentDescription = stringResource(R.string.cd_backup_options)
+                                contentDescription = stringResource(R.string.cd_more_options)
                             )
                         }
                         DropdownMenu(
@@ -260,6 +258,14 @@ fun TrackerMainScreen(
                                 onClick = {
                                     overflowExpanded = false
                                     restoreBackupLauncher.launch(arrayOf("application/json", "*/*"))
+                                }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_manage_categories)) },
+                                onClick = {
+                                    overflowExpanded = false
+                                    showManageCategoriesDialog = true
                                 }
                             )
                         }
@@ -323,10 +329,6 @@ fun TrackerMainScreen(
                     kidName = kidName,
                     balanceCents = balanceCents,
                     transactions = transactions,
-                    filterCategories = filterBarCategories,
-                    selectedFilterTag = selectedFilterTag,
-                    onSelectFilterTag = viewModel::setFilterTag,
-                    onOpenManageCategories = { showManageCategoriesDialog = true },
                     onDeleteTransaction = viewModel::deleteTransaction,
                     modifier = Modifier
                         .fillMaxSize()

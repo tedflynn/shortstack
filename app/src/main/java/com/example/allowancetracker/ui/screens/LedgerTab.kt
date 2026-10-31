@@ -1,5 +1,6 @@
 package com.example.allowancetracker.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,18 +15,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,7 +50,6 @@ import com.example.allowancetracker.data.model.Transaction
 import com.example.allowancetracker.data.model.TransactionType
 import com.example.allowancetracker.ui.theme.CreditGreen
 import com.example.allowancetracker.ui.theme.DebitRed
-import com.example.allowancetracker.ui.theme.NegativeOnDark
 import com.example.allowancetracker.util.Money
 import java.time.Instant
 import java.time.ZoneId
@@ -65,10 +62,6 @@ fun RunningTallyTabContent(
     kidName: String,
     balanceCents: Long,
     transactions: List<Transaction>,
-    filterCategories: List<String>,
-    selectedFilterTag: String?,
-    onSelectFilterTag: (String?) -> Unit,
-    onOpenManageCategories: () -> Unit,
     onDeleteTransaction: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -118,18 +111,9 @@ fun RunningTallyTabContent(
             )
         }
 
-        item(key = "filter_bar") {
-            CategoryFilterBar(
-                categories = filterCategories,
-                selectedTag = selectedFilterTag,
-                onSelectTag = onSelectFilterTag,
-                onOpenManageCategories = onOpenManageCategories
-            )
-        }
-
         if (transactions.isEmpty()) {
             item(key = "empty_state") {
-                EmptyTransactionsCard(selectedFilter = selectedFilterTag)
+                EmptyTransactionsCard()
             }
         } else {
             items(
@@ -151,18 +135,16 @@ fun BalanceHeaderCard(
     runningBalanceCents: Long,
     modifier: Modifier = Modifier
 ) {
-    val balanceColor = if (runningBalanceCents < 0L) {
-        NegativeOnDark
-    } else {
-        MaterialTheme.colorScheme.onPrimaryContainer
-    }
+    // Outline and text follow the balance's sign; zero counts as not negative.
+    val balanceColor = if (runningBalanceCents < 0L) DebitRed else CreditGreen
 
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(2.dp, balanceColor)
     ) {
         Column(
             modifier = Modifier
@@ -172,7 +154,7 @@ fun BalanceHeaderCard(
             Text(
                 text = stringResource(R.string.balance_title, kidName),
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                color = balanceColor
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -180,52 +162,6 @@ fun BalanceHeaderCard(
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.ExtraBold,
                 color = balanceColor
-            )
-        }
-    }
-}
-
-@Composable
-fun CategoryFilterBar(
-    categories: List<String>,
-    selectedTag: String?,
-    onSelectTag: (String?) -> Unit,
-    onOpenManageCategories: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    // null is the "All" option, so a category can't collide with it.
-    val filterOptions: List<String?> = remember(categories) {
-        listOf<String?>(null) + categories
-    }
-
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        items(filterOptions) { tag ->
-            val isSelected = if (tag == null) {
-                selectedTag == null
-            } else {
-                selectedTag.equals(tag, ignoreCase = true)
-            }
-
-            FilterChip(
-                selected = isSelected,
-                onClick = { onSelectTag(tag) },
-                label = { Text(text = tag ?: stringResource(R.string.filter_all)) }
-            )
-        }
-
-        item(key = "manage_categories_chip") {
-            AssistChip(
-                onClick = onOpenManageCategories,
-                label = {
-                    Text(
-                        text = stringResource(R.string.filter_manage),
-                        fontWeight = FontWeight.Bold
-                    )
-                }
             )
         }
     }
@@ -383,7 +319,6 @@ fun TransactionRowCard(
 
 @Composable
 fun EmptyTransactionsCard(
-    selectedFilter: String?,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -400,11 +335,7 @@ fun EmptyTransactionsCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (selectedFilter == null) {
-                    stringResource(R.string.empty_ledger_title)
-                } else {
-                    stringResource(R.string.empty_ledger_filtered, selectedFilter)
-                },
+                text = stringResource(R.string.empty_ledger_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )

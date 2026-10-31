@@ -95,14 +95,6 @@ class TrackerViewModel(
             initialValue = DefaultCategories.DEFAULT_CATEGORIES
         )
 
-    val filterBarCategories: StateFlow<List<String>> = categories
-        .map { list -> list.distinct() }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = DefaultCategories.DEFAULT_CATEGORIES
-        )
-
     val usedCategories: StateFlow<Set<String>> =
         repository.allTransactions
             .map { list ->
@@ -113,9 +105,6 @@ class TrackerViewModel(
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = emptySet()
             )
-
-    private val _selectedFilterTag = MutableStateFlow<String?>(null)
-    val selectedFilterTag: StateFlow<String?> = _selectedFilterTag
 
     /**
      * Lower-cased categories the user switched off in the charts. Tracking the
@@ -156,7 +145,7 @@ class TrackerViewModel(
         )
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val allTransactions: StateFlow<List<Transaction>> = _selectedKid
+    val transactions: StateFlow<List<Transaction>> = _selectedKid
         .flatMapLatest { kidName ->
             if (kidName == null) flowOf(emptyList())
             else repository.getTransactionsForKid(kidName)
@@ -166,21 +155,6 @@ class TrackerViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList()
         )
-
-    val transactions: StateFlow<List<Transaction>> = combine(
-        allTransactions,
-        _selectedFilterTag
-    ) { list, filterTag ->
-        if (filterTag.isNullOrBlank()) {
-            list
-        } else {
-            list.filter { it.category.equals(filterTag, ignoreCase = true) }
-        }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = emptyList()
-    )
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val rawCategoryIncome = combine(
@@ -309,9 +283,6 @@ class TrackerViewModel(
         viewModelScope.launch {
             val deleted = repository.deleteUnusedCategory(name)
             if (deleted) {
-                if (_selectedFilterTag.value.equals(name, ignoreCase = true)) {
-                    _selectedFilterTag.value = null
-                }
                 emitMessage(R.string.message_category_removed, name)
             } else {
                 emitMessage(R.string.message_category_in_use, name)
@@ -353,11 +324,6 @@ class TrackerViewModel(
             repository.deleteTransaction(transaction)
             emitMessage(R.string.message_entry_deleted, transaction.title)
         }
-    }
-
-    /** Filters the ledger to one category; null shows all. */
-    fun setFilterTag(tag: String?) {
-        _selectedFilterTag.value = tag
     }
 
     fun exportToJson(outputStream: OutputStream) {

@@ -18,7 +18,6 @@ internal val Slate900 = Color(0xFF0F172A)
 internal val Emerald100 = Color(0xFFD1FAE5)
 internal val Emerald900 = Color(0xFF064E3B)
 internal val Red100 = Color(0xFFFEE2E2)
-internal val Red400 = Color(0xFFF87171)
 internal val Red800 = Color(0xFF991B1B)
 internal val Red900 = Color(0xFF7F1D1D)
 
@@ -31,6 +30,3 @@ val CreditContainer = Emerald100
 val OnCreditContainer = Emerald900
 val DebitContainer = Red100
 val OnDebitContainer = Red900
-
-/** Negative balances on the dark balance card need a lighter red to stay readable. */
-val NegativeOnDark = Red400
