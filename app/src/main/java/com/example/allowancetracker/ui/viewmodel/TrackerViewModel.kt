@@ -1,8 +1,10 @@
 package com.example.allowancetracker.ui.viewmodel
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.allowancetracker.R
 import com.example.allowancetracker.data.local.CategorySum
 import com.example.allowancetracker.data.local.SelectedKidStore
 import com.example.allowancetracker.data.model.DefaultCategories
@@ -32,8 +34,17 @@ class TrackerViewModel(
     private val selectedKidStore: SelectedKidStore
 ) : ViewModel() {
 
-    /** The kid the user last picked; may be stale if that kid was removed. */
-    private val _preferredKid = MutableStateFlow(selectedKidStore.lastSelectedKid)
+    /** Wraps the stored choice so "not loaded yet" (null) differs from "nothing stored". */
+    private data class PreferredKid(val name: String?)
+
+    /** The kid the user last picked (may be stale if that kid was removed); null until loaded. */
+    private val preferredKid: StateFlow<PreferredKid?> = selectedKidStore.lastSelectedKid
+        .map { PreferredKid(it) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = null
+        )
 
     /** Null until the database has loaded the kid list. */
     private val loadedKids: StateFlow<List<String>?> = repository.kidNames
@@ -61,10 +72,10 @@ class TrackerViewModel(
         )
 
     /** The preferred kid if they still exist, otherwise the first kid; null when there are none. */
-    private val _selectedKid: StateFlow<String?> = combine(loadedKids, _preferredKid) { names, preferred ->
+    private val _selectedKid: StateFlow<String?> = combine(loadedKids, preferredKid) { names, preferred ->
         when {
-            names.isNullOrEmpty() -> null
-            preferred != null && preferred in names -> preferred
+            names.isNullOrEmpty() || preferred == null -> null
+            preferred.name != null && preferred.name in names -> preferred.name
             else -> names.first()
         }
     }.stateIn(
@@ -103,7 +114,8 @@ class TrackerViewModel(
                 initialValue = emptySet()
             )
 
-    val selectedFilterTag: MutableStateFlow<String?> = MutableStateFlow(null)
+    private val _selectedFilterTag = MutableStateFlow<String?>(null)
+    val selectedFilterTag: StateFlow<String?> = _selectedFilterTag
 
     /**
      * Lower-cased categories the user switched off in the charts. Tracking the
@@ -113,11 +125,17 @@ class TrackerViewModel(
     private val _hiddenCategories = MutableStateFlow<Set<String>>(emptySet())
 
     // Raw DatePicker selections (midnight UTC); see DateRanges.toLocalRange.
-    val startDateMillis: MutableStateFlow<Long?> = MutableStateFlow(null)
-    val endDateMillis: MutableStateFlow<Long?> = MutableStateFlow(null)
+    private val _startDateMillis = MutableStateFlow<Long?>(null)
+    val startDateMillis: StateFlow<Long?> = _startDateMillis
+    private val _endDateMillis = MutableStateFlow<Long?>(null)
+    val endDateMillis: StateFlow<Long?> = _endDateMillis
 
-    private val _uiMessages = MutableSharedFlow<String>()
-    val uiMessages: SharedFlow<String> = _uiMessages.asSharedFlow()
+    private val _uiMessages = MutableSharedFlow<UiMessage>()
+    val uiMessages: SharedFlow<UiMessage> = _uiMessages.asSharedFlow()
+
+    private suspend fun emitMessage(@StringRes resId: Int, vararg args: String) {
+        _uiMessages.emit(UiMessage(resId, args.toList()))
+    }
 
     init {
         viewModelScope.launch {
@@ -151,9 +169,9 @@ class TrackerViewModel(
 
     val transactions: StateFlow<List<Transaction>> = combine(
         allTransactions,
-        selectedFilterTag
+        _selectedFilterTag
     ) { list, filterTag ->
-        if (filterTag.isNullOrBlank() || filterTag.equals("All", ignoreCase = true)) {
+        if (filterTag.isNullOrBlank()) {
             list
         } else {
             list.filter { it.category.equals(filterTag, ignoreCase = true) }
@@ -167,8 +185,8 @@ class TrackerViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     private val rawCategoryIncome = combine(
         _selectedKid,
-        startDateMillis,
-        endDateMillis
+        _startDateMillis,
+        _endDateMillis
     ) { kidName, start, end ->
         kidName to DateRanges.toLocalRange(start, end)
     }.flatMapLatest { (kidName, range) ->
@@ -198,8 +216,8 @@ class TrackerViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     private val rawCategorySpending = combine(
         _selectedKid,
-        startDateMillis,
-        endDateMillis
+        _startDateMillis,
+        _endDateMillis
     ) { kidName, start, end ->
         kidName to DateRanges.toLocalRange(start, end)
     }.flatMapLatest { (kidName, range) ->
@@ -254,8 +272,7 @@ class TrackerViewModel(
     fun selectKid(kidName: String) {
         val trimmed = kidName.trim()
         if (trimmed.isBlank()) return
-        _preferredKid.value = trimmed
-        selectedKidStore.lastSelectedKid = trimmed
+        viewModelScope.launch { selectedKidStore.setLastSelectedKid(trimmed) }
     }
 
     fun addKid(kidName: String) {
@@ -263,17 +280,17 @@ class TrackerViewModel(
         if (trimmed.isBlank()) return
         viewModelScope.launch {
             repository.insertKid(trimmed)
-            selectKid(trimmed)
-            _uiMessages.emit("Switched to $trimmed's ledger")
+            selectedKidStore.setLastSelectedKid(trimmed)
+            emitMessage(R.string.message_switched_kid, trimmed)
         }
     }
 
     fun removeKidIfUnused(kidName: String) {
         viewModelScope.launch {
             if (repository.deleteUnusedKid(kidName)) {
-                _uiMessages.emit("Removed $kidName")
+                emitMessage(R.string.message_kid_removed, kidName)
             } else {
-                _uiMessages.emit("Can't remove $kidName because they have ledger entries")
+                emitMessage(R.string.message_kid_has_entries, kidName)
             }
         }
     }
@@ -284,7 +301,7 @@ class TrackerViewModel(
         showCategory(trimmed)
         viewModelScope.launch {
             repository.addCategory(trimmed)
-            _uiMessages.emit("Added \"$trimmed\" to categories")
+            emitMessage(R.string.message_category_added, trimmed)
         }
     }
 
@@ -292,19 +309,19 @@ class TrackerViewModel(
         viewModelScope.launch {
             val deleted = repository.deleteUnusedCategory(name)
             if (deleted) {
-                if (selectedFilterTag.value.equals(name, ignoreCase = true)) {
-                    selectedFilterTag.value = null
+                if (_selectedFilterTag.value.equals(name, ignoreCase = true)) {
+                    _selectedFilterTag.value = null
                 }
-                _uiMessages.emit("Removed unused category \"$name\"")
+                emitMessage(R.string.message_category_removed, name)
             } else {
-                _uiMessages.emit("Cannot delete \"$name\" because it is used in transactions")
+                emitMessage(R.string.message_category_in_use, name)
             }
         }
     }
 
     fun setDateRange(startMillis: Long?, endMillis: Long?) {
-        startDateMillis.value = startMillis
-        endDateMillis.value = endMillis
+        _startDateMillis.value = startMillis
+        _endDateMillis.value = endMillis
     }
 
     fun addTransaction(
@@ -334,22 +351,23 @@ class TrackerViewModel(
     fun deleteTransaction(transaction: Transaction) {
         viewModelScope.launch {
             repository.deleteTransaction(transaction)
-            _uiMessages.emit("Deleted \"${transaction.title}\"")
+            emitMessage(R.string.message_entry_deleted, transaction.title)
         }
     }
 
+    /** Filters the ledger to one category; null shows all. */
     fun setFilterTag(tag: String?) {
-        selectedFilterTag.value = if (tag.equals("All", ignoreCase = true)) null else tag
+        _selectedFilterTag.value = tag
     }
 
     fun exportToJson(outputStream: OutputStream) {
         viewModelScope.launch {
             repository.exportToJson(outputStream)
                 .onSuccess { count ->
-                    _uiMessages.emit("Exported $count transactions to backup")
+                    emitMessage(R.string.message_export_succeeded, count.toString())
                 }
                 .onFailure { error ->
-                    _uiMessages.emit("Backup export failed: ${error.localizedMessage ?: "Unknown error"}")
+                    emitMessage(R.string.message_export_failed, error.localizedMessage.orEmpty())
                 }
         }
     }
@@ -358,10 +376,10 @@ class TrackerViewModel(
         viewModelScope.launch {
             repository.importFromJson(inputStream, replaceExisting = true)
                 .onSuccess { count ->
-                    _uiMessages.emit("Restored $count transactions from backup")
+                    emitMessage(R.string.message_restore_succeeded, count.toString())
                 }
                 .onFailure { error ->
-                    _uiMessages.emit("Restore failed: ${error.localizedMessage ?: "Invalid JSON format"}")
+                    emitMessage(R.string.message_restore_failed, error.localizedMessage.orEmpty())
                 }
         }
     }

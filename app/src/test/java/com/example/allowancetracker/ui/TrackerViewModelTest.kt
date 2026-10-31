@@ -3,17 +3,20 @@ package com.example.allowancetracker.ui
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.example.allowancetracker.R
 import com.example.allowancetracker.data.local.AppDatabase
 import com.example.allowancetracker.data.local.SelectedKidStore
 import com.example.allowancetracker.data.model.Transaction
 import com.example.allowancetracker.data.model.TransactionType
 import com.example.allowancetracker.repository.TransactionRepository
 import com.example.allowancetracker.ui.viewmodel.TrackerViewModel
+import com.example.allowancetracker.ui.viewmodel.UiMessage
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
@@ -29,7 +32,14 @@ import org.robolectric.RobolectricTestRunner
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class TrackerViewModelTest {
-    private class FakeStore(override var lastSelectedKid: String? = null) : SelectedKidStore
+    private class FakeStore(initial: String? = null) : SelectedKidStore {
+        private val state = MutableStateFlow(initial)
+        override val lastSelectedKid: Flow<String?> = state
+        val current: String? get() = state.value
+        override suspend fun setLastSelectedKid(name: String) {
+            state.value = name
+        }
+    }
 
     private lateinit var db: AppDatabase
     private lateinit var repository: TransactionRepository
@@ -61,7 +71,7 @@ class TrackerViewModelTest {
 
         vm.addKid("Sam")
         vm.selectedKid.awaitValue { it == "Sam" }
-        assertEquals("Sam", store.lastSelectedKid)
+        assertEquals("Sam", store.current)
         vm.hasNoKids.awaitValue { !it }
         Unit
     }
@@ -71,13 +81,13 @@ class TrackerViewModelTest {
         repository.insertKid("Ada")
         repository.insertKid("Sam")
 
-        val vm = TrackerViewModel(repository, FakeStore(lastSelectedKid = "Sam"))
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
         vm.selectedKid.awaitValue { it == "Sam" }
 
         vm.removeKidIfUnused("Sam")
         vm.selectedKid.awaitValue { it == "Ada" }
 
-        val staleVm = TrackerViewModel(repository, FakeStore(lastSelectedKid = "Ghost"))
+        val staleVm = TrackerViewModel(repository, FakeStore(initial = "Ghost"))
         staleVm.selectedKid.awaitValue { it == "Ada" }
         Unit
     }
@@ -94,7 +104,7 @@ class TrackerViewModelTest {
             )
         )
         // A new ViewModel stands in for the app being restarted.
-        val vm = TrackerViewModel(repository, FakeStore(lastSelectedKid = "Sam"))
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
 
         vm.categorySpending.awaitValue { sums -> sums.map { it.category } == listOf("Snacks") }
         vm.selectedCategories.awaitValue { it == setOf("Snacks") }
@@ -119,7 +129,7 @@ class TrackerViewModelTest {
             vm.uiMessages.awaitValue { true }
         }
         vm.removeKidIfUnused("Sam")
-        assert(message.await().startsWith("Can't remove"))
+        assertEquals(UiMessage(R.string.message_kid_has_entries, listOf("Sam")), message.await())
         assertEquals(listOf("Sam"), vm.kids.value)
     }
 }

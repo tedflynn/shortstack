@@ -39,6 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.allowancetracker.data.local.CategorySum
+import androidx.compose.ui.res.stringResource
+import com.example.allowancetracker.R
 import com.example.allowancetracker.util.Money
 import com.example.allowancetracker.util.Percentages
 
@@ -73,8 +75,8 @@ fun getCategoryColor(
 fun CategoryDonutChart(
     categorySpending: List<CategorySum>,
     modifier: Modifier = Modifier,
-    totalLabel: String = "Total Spent",
-    emptyLabel: String = "No Spends",
+    totalLabel: String,
+    emptyLabel: String,
     chartSize: Dp = 148.dp,
     strokeWidth: Dp = 22.dp
 ) {
@@ -163,7 +165,7 @@ fun CategoryDonutChart(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "$0.00",
+                    text = Money.format(0L),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -210,7 +212,7 @@ fun CategoryLegend(
 
     if (categorySpending.isEmpty() || totalSpending <= 0L) {
         Text(
-            text = "Record a debit transaction to see spending breakdown by category.",
+            text = stringResource(R.string.chart_legend_empty),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = modifier.fillMaxWidth()
@@ -251,7 +253,7 @@ fun CategoryLegend(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "${Money.format(item.totalCents)} ($percentage%)",
+                        text = stringResource(R.string.chart_legend_item, Money.format(item.totalCents), percentage),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
