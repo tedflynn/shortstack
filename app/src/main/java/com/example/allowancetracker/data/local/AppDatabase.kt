@@ -77,7 +77,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(*ALL_MIGRATIONS)
                 // Versions 1-2 only existed during early development, before
                 // schemas were exported, so they cannot be migrated.
-                .fallbackToDestructiveMigrationFrom(1, 2)
+                .fallbackToDestructiveMigrationFrom(dropAllTables = true, 1, 2)
                 .build()
         }
     }
