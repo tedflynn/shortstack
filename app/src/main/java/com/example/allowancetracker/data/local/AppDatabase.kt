@@ -16,8 +16,8 @@ class TransactionTypeConverters {
     fun fromTransactionType(type: TransactionType): String = type.name
 
     @TypeConverter
-    fun toTransactionType(value: String): TransactionType =
-        TransactionType.valueOf(value)
+    fun toTransactionType(value: String): String =
+        TransactionType.valueOf(value).name
 }
 
 @Database(
