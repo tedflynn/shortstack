@@ -44,7 +44,7 @@ data class CategoryEntity(
 data class Transaction(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,
-    val kidName: String = DEFAULT_KID_NAME,
+    val kidName: String,
     val title: String,
     /** Always positive, in whole cents; [type] decides whether it adds or subtracts. */
     val amountCents: Long,
@@ -56,10 +56,6 @@ data class Transaction(
         require(amountCents > 0L) { "Transaction amount must always be positive." }
         require(title.isNotBlank()) { "Transaction title cannot be blank." }
         require(kidName.isNotBlank()) { "Kid name cannot be blank." }
-    }
-
-    companion object {
-        const val DEFAULT_KID_NAME = "Maya"
     }
 }
 

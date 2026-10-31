@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.allowancetracker.data.local.CategorySum
+import com.example.allowancetracker.data.local.SelectedKidStore
 import com.example.allowancetracker.data.model.DefaultCategories
 import com.example.allowancetracker.data.model.Transaction
 import com.example.allowancetracker.data.model.TransactionType
@@ -16,9 +17,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -27,21 +28,51 @@ import java.io.InputStream
 import java.io.OutputStream
 
 class TrackerViewModel(
-    private val repository: TransactionRepository
+    private val repository: TransactionRepository,
+    private val selectedKidStore: SelectedKidStore
 ) : ViewModel() {
 
-    private val _selectedKid = MutableStateFlow(Transaction.DEFAULT_KID_NAME)
-    val selectedKid: StateFlow<String> = _selectedKid.asStateFlow()
+    /** The kid the user last picked; may be stale if that kid was removed. */
+    private val _preferredKid = MutableStateFlow(selectedKidStore.lastSelectedKid)
 
-    val kids: StateFlow<List<String>> = repository.kidNames
-        .map { names ->
-            if (names.isEmpty()) listOf(Transaction.DEFAULT_KID_NAME) else names
-        }
+    /** Null until the database has loaded the kid list. */
+    private val loadedKids: StateFlow<List<String>?> = repository.kidNames
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = null
+        )
+
+    val kids: StateFlow<List<String>> = loadedKids
+        .map { it.orEmpty() }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = listOf(Transaction.DEFAULT_KID_NAME)
+            initialValue = emptyList()
         )
+
+    /** True once loaded with no kids yet, so the UI can prompt to add one. */
+    val hasNoKids: StateFlow<Boolean> = loadedKids
+        .map { it != null && it.isEmpty() }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false
+        )
+
+    /** The preferred kid if they still exist, otherwise the first kid; null when there are none. */
+    private val _selectedKid: StateFlow<String?> = combine(loadedKids, _preferredKid) { names, preferred ->
+        when {
+            names.isNullOrEmpty() -> null
+            preferred != null && preferred in names -> preferred
+            else -> names.first()
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = null
+    )
+    val selectedKid: StateFlow<String?> = _selectedKid
 
     val categories: StateFlow<List<String>> = repository.categories
         .map { list ->
@@ -74,10 +105,12 @@ class TrackerViewModel(
 
     val selectedFilterTag: MutableStateFlow<String?> = MutableStateFlow(null)
 
-    private val _selectedCategories = MutableStateFlow<Set<String>>(
-        DefaultCategories.DEFAULT_CATEGORIES.toSet()
-    )
-    val selectedCategories: StateFlow<Set<String>> = _selectedCategories.asStateFlow()
+    /**
+     * Lower-cased categories the user switched off in the charts. Tracking the
+     * hidden ones (rather than the shown ones) means every category, including
+     * ones added later, is shown by default.
+     */
+    private val _hiddenCategories = MutableStateFlow<Set<String>>(emptySet())
 
     // Raw DatePicker selections (midnight UTC); see DateRanges.toLocalRange.
     val startDateMillis: MutableStateFlow<Long?> = MutableStateFlow(null)
@@ -95,7 +128,8 @@ class TrackerViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     val balanceCents: StateFlow<Long> = _selectedKid
         .flatMapLatest { kidName ->
-            repository.getRunningBalanceForKid(kidName).map { it ?: 0L }
+            if (kidName == null) flowOf(0L)
+            else repository.getRunningBalanceForKid(kidName).map { it ?: 0L }
         }
         .stateIn(
             scope = viewModelScope,
@@ -106,7 +140,8 @@ class TrackerViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     val allTransactions: StateFlow<List<Transaction>> = _selectedKid
         .flatMapLatest { kidName ->
-            repository.getTransactionsForKid(kidName)
+            if (kidName == null) flowOf(emptyList())
+            else repository.getTransactionsForKid(kidName)
         }
         .stateIn(
             scope = viewModelScope,
@@ -137,7 +172,8 @@ class TrackerViewModel(
     ) { kidName, start, end ->
         kidName to DateRanges.toLocalRange(start, end)
     }.flatMapLatest { (kidName, range) ->
-        repository.getCreditTotalsByCategoryForKidInRange(kidName, range.first, range.last)
+        if (kidName == null) flowOf(emptyList())
+        else repository.getCreditTotalsByCategoryForKidInRange(kidName, range.first, range.last)
     }
 
     val matchingIncomeCategories: StateFlow<List<String>> = rawCategoryIncome
@@ -150,10 +186,9 @@ class TrackerViewModel(
 
     val categoryIncome: StateFlow<List<CategorySum>> = combine(
         rawCategoryIncome,
-        _selectedCategories
-    ) { sums, selectedSet ->
-        val normalizedSelected = selectedSet.map { it.lowercase() }.toSet()
-        sums.filter { normalizedSelected.contains(it.category.lowercase()) }
+        _hiddenCategories
+    ) { sums, hidden ->
+        sums.filter { it.category.lowercase() !in hidden }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -168,7 +203,8 @@ class TrackerViewModel(
     ) { kidName, start, end ->
         kidName to DateRanges.toLocalRange(start, end)
     }.flatMapLatest { (kidName, range) ->
-        repository.getDebitTotalsByCategoryForKidInRange(kidName, range.first, range.last)
+        if (kidName == null) flowOf(emptyList())
+        else repository.getDebitTotalsByCategoryForKidInRange(kidName, range.first, range.last)
     }
 
     val matchingExpenseCategories: StateFlow<List<String>> = rawCategorySpending
@@ -181,32 +217,45 @@ class TrackerViewModel(
 
     val categorySpending: StateFlow<List<CategorySum>> = combine(
         rawCategorySpending,
-        _selectedCategories
-    ) { sums, selectedSet ->
-        val normalizedSelected = selectedSet.map { it.lowercase() }.toSet()
-        sums.filter { normalizedSelected.contains(it.category.lowercase()) }
+        _hiddenCategories
+    ) { sums, hidden ->
+        sums.filter { it.category.lowercase() !in hidden }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = emptyList()
     )
 
+    /** Categories currently shown in the charts (all of them unless switched off). */
+    val selectedCategories: StateFlow<Set<String>> = combine(
+        matchingIncomeCategories,
+        matchingExpenseCategories,
+        _hiddenCategories
+    ) { income, expenses, hidden ->
+        (income + expenses).filter { it.lowercase() !in hidden }.toSet()
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptySet()
+    )
+
     fun toggleCategorySelection(category: String) {
-        val trimmed = category.trim()
-        if (trimmed.isBlank()) return
-        _selectedCategories.update { current ->
-            val match = current.firstOrNull { it.equals(trimmed, ignoreCase = true) }
-            if (match != null) {
-                current - match
-            } else {
-                current + trimmed
-            }
+        val key = category.trim().lowercase()
+        if (key.isBlank()) return
+        _hiddenCategories.update { hidden ->
+            if (key in hidden) hidden - key else hidden + key
         }
     }
 
+    private fun showCategory(category: String) {
+        _hiddenCategories.update { it - category.trim().lowercase() }
+    }
+
     fun selectKid(kidName: String) {
-        if (kidName.isBlank()) return
-        _selectedKid.value = kidName.trim()
+        val trimmed = kidName.trim()
+        if (trimmed.isBlank()) return
+        _preferredKid.value = trimmed
+        selectedKidStore.lastSelectedKid = trimmed
     }
 
     fun addKid(kidName: String) {
@@ -214,15 +263,25 @@ class TrackerViewModel(
         if (trimmed.isBlank()) return
         viewModelScope.launch {
             repository.insertKid(trimmed)
-            _selectedKid.value = trimmed
+            selectKid(trimmed)
             _uiMessages.emit("Switched to $trimmed's ledger")
+        }
+    }
+
+    fun removeKidIfUnused(kidName: String) {
+        viewModelScope.launch {
+            if (repository.deleteUnusedKid(kidName)) {
+                _uiMessages.emit("Removed $kidName")
+            } else {
+                _uiMessages.emit("Can't remove $kidName because they have ledger entries")
+            }
         }
     }
 
     fun addCategory(name: String) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
-        _selectedCategories.update { it + trimmed }
+        showCategory(trimmed)
         viewModelScope.launch {
             repository.addCategory(trimmed)
             _uiMessages.emit("Added \"$trimmed\" to categories")
@@ -257,8 +316,8 @@ class TrackerViewModel(
     ) {
         val trimmedCategory = category.trim()
         if (title.isBlank() || amountCents <= 0L || trimmedCategory.isBlank()) return
-        val currentKid = _selectedKid.value
-        _selectedCategories.update { it + trimmedCategory }
+        val currentKid = _selectedKid.value ?: return
+        showCategory(trimmedCategory)
         viewModelScope.launch {
             val transaction = Transaction(
                 kidName = currentKid,
@@ -308,12 +367,13 @@ class TrackerViewModel(
     }
 
     class Factory(
-        private val repository: TransactionRepository
+        private val repository: TransactionRepository,
+        private val selectedKidStore: SelectedKidStore
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(TrackerViewModel::class.java)) {
-                return TrackerViewModel(repository) as T
+                return TrackerViewModel(repository, selectedKidStore) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }

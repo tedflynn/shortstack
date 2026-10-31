@@ -7,10 +7,6 @@ build/
 /captures
 .externalNativeBuild
 .cxx/
-node_modules/
-dist/
-coverage/
+.kotlin/
 *.log
-.env*
-!.env.example
 out/

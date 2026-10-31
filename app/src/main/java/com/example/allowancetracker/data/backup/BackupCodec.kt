@@ -26,7 +26,7 @@ data class BackupKid(
 
 @Serializable
 data class BackupTransaction(
-    val kidName: String = Transaction.DEFAULT_KID_NAME,
+    val kidName: String,
     val title: String,
     /** Present in format version 2+. */
     val amountCents: Long? = null,

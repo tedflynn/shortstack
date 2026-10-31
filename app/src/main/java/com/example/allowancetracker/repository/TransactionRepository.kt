@@ -60,7 +60,6 @@ class TransactionRepository(
 
     suspend fun seedDefaultsIfNeeded() {
         withContext(Dispatchers.IO) {
-            transactionDao.insertKid(KidProfile(name = Transaction.DEFAULT_KID_NAME))
             if (transactionDao.getAllCategoryNames().first().isEmpty()) {
                 DefaultCategories.DEFAULT_CATEGORIES.forEach { name ->
                     transactionDao.insertCategory(CategoryEntity(name = name))
@@ -72,6 +71,12 @@ class TransactionRepository(
     suspend fun insertKid(name: String) {
         withContext(Dispatchers.IO) {
             transactionDao.insertKid(KidProfile(name = name.trim()))
+        }
+    }
+
+    suspend fun deleteUnusedKid(name: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            transactionDao.deleteUnusedKid(name) > 0
         }
     }
 

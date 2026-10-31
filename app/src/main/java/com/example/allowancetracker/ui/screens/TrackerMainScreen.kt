@@ -121,6 +121,7 @@ fun TrackerMainScreen(
     val context = LocalContext.current
     val kids by viewModel.kids.collectAsState()
     val selectedKid by viewModel.selectedKid.collectAsState()
+    val hasNoKids by viewModel.hasNoKids.collectAsState()
     val balanceCents by viewModel.balanceCents.collectAsState()
     val transactions by viewModel.transactions.collectAsState()
     val categoryIncome by viewModel.categoryIncome.collectAsState()
@@ -188,7 +189,7 @@ fun TrackerMainScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = selectedKid,
+                                    text = selectedKid ?: "Add kid",
                                     fontWeight = FontWeight.Bold
                                 )
                                 Icon(
@@ -241,6 +242,15 @@ fun TrackerMainScreen(
                                         showAddKidDialog = true
                                     }
                                 )
+                                selectedKid?.let { kidName ->
+                                    DropdownMenuItem(
+                                        text = { Text(text = "Remove $kidName") },
+                                        onClick = {
+                                            kidMenuExpanded = false
+                                            viewModel.removeKidIfUnused(kidName)
+                                        }
+                                    )
+                                }
                             }
                         }
                     },
@@ -309,25 +319,39 @@ fun TrackerMainScreen(
         },
         floatingActionButtonPosition = FabPosition.End,
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showEntrySheet = true },
-                expanded = true,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null
-                    )
-                },
-                text = { Text(text = "Entry", fontWeight = FontWeight.SemiBold) }
-            )
+            if (selectedKid != null) {
+                ExtendedFloatingActionButton(
+                    onClick = { showEntrySheet = true },
+                    expanded = true,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null
+                        )
+                    },
+                    text = { Text(text = "Entry", fontWeight = FontWeight.SemiBold) }
+                )
+            }
         }
     ) { innerPadding ->
+        val kidName = selectedKid
+        if (kidName == null) {
+            if (hasNoKids) {
+                AddFirstKidContent(
+                    onAddKid = { showAddKidDialog = true },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                )
+            }
+            return@Scaffold
+        }
         when (TrackerTab.entries[selectedTabIndex]) {
             TrackerTab.RUNNING_TALLY -> {
                 RunningTallyTabContent(
-                    kidName = selectedKid,
+                    kidName = kidName,
                     balanceCents = balanceCents,
                     transactions = transactions,
                     filterCategories = filterBarCategories,
@@ -343,7 +367,7 @@ fun TrackerMainScreen(
 
             TrackerTab.INCOME -> {
                 CategoryBreakdownTabContent(
-                    kidName = selectedKid,
+                    kidName = kidName,
                     tabTitle = "Income",
                     accentColor = CreditGreen,
                     matchingCategories = matchingIncomeCategories,
@@ -363,7 +387,7 @@ fun TrackerMainScreen(
 
             TrackerTab.EXPENSES -> {
                 CategoryBreakdownTabContent(
-                    kidName = selectedKid,
+                    kidName = kidName,
                     tabTitle = "Expenses",
                     accentColor = DebitRed,
                     matchingCategories = matchingExpenseCategories,
@@ -403,9 +427,10 @@ fun TrackerMainScreen(
         )
     }
 
-    if (showEntrySheet) {
+    val entryKid = selectedKid
+    if (showEntrySheet && entryKid != null) {
         AddTransactionBottomSheet(
-            kidName = selectedKid,
+            kidName = entryKid,
             categories = categories,
             onDismiss = { showEntrySheet = false },
             onSaveTransaction = { title, amountCents, type, category ->
@@ -418,6 +443,36 @@ fun TrackerMainScreen(
                 showEntrySheet = false
             }
         )
+    }
+}
+
+@Composable
+fun AddFirstKidContent(
+    onAddKid: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Welcome!",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Add a kid to start tracking their allowance.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(onClick = onAddKid) {
+            Icon(imageVector = Icons.Default.Add, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Add a kid")
+        }
     }
 }
 
