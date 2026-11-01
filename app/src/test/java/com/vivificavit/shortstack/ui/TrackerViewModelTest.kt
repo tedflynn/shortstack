@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -205,5 +206,17 @@ class TrackerViewModelTest {
         val restored = vm.ledger.awaitValue { it?.transactions?.size == 1 }!!
         assertEquals(entry, restored.transactions.single())
         assertEquals(-300L, restored.balanceCents)
+    }
+
+    @Test
+    fun oversizedRestoreIsRejectedAndKeepsExistingData() = runBlocking {
+        val existing = Transaction(kidName = "Sam", title = "Comic", amountCents = 300, type = TransactionType.DEBIT)
+        repository.insertTransaction(existing)
+
+        val tooBig = ByteArray(TransactionRepository.MAX_BACKUP_BYTES + 1) { ' '.code.toByte() }
+        val result = repository.importFromJson(tooBig.inputStream(), replaceExisting = true)
+
+        assertTrue(result.isFailure)
+        assertEquals(listOf("Comic"), repository.getTransactionsForKid("Sam").first().map { it.title })
     }
 }

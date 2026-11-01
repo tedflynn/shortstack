@@ -51,11 +51,37 @@ class BackupCodecTest {
             "not json",
             """[{"title":"x","type":"CREDIT","timestamp":1}]""",
             """[{"title":"x","amount":-1.0,"type":"CREDIT","timestamp":1}]""",
-            """{"formatVersion":99}"""
+            """{"formatVersion":99}""",
+            entry(amountCents = -500),
+            entry(amountCents = 0),
+            entry(amountCents = 100_000_001),
+            entry(kidName = "   "),
+            entry(title = ""),
+            entry(category = " "),
+            entry(timestamp = -1),
+            entry(timestamp = 9_999_999_999_999),
+            """{"kids":[{"name":" "}]}"""
         )
         bad.forEach { raw ->
             val failed = runCatching { BackupCodec.decode(raw) }.isFailure
             assertTrue("expected failure for $raw", failed)
         }
     }
+
+    @Test
+    fun acceptsTheLargestAllowedEntry() {
+        val decoded = BackupCodec.decode(entry(amountCents = 100_000_000))
+        assertEquals(100_000_000L, decoded.transactions.single().amountCents)
+    }
+
+    /** A one-entry backup that's valid unless a field is overridden. */
+    private fun entry(
+        amountCents: Long = 500,
+        kidName: String = "Sam",
+        title: String = "Lawn",
+        category: String = "Job",
+        timestamp: Long = 1_000
+    ): String =
+        """{"transactions":[{"kidName":"$kidName","title":"$title","amountCents":$amountCents,""" +
+            """"type":"CREDIT","category":"$category","timestamp":$timestamp}]}"""
 }

@@ -9,6 +9,7 @@
     <string name="menu_edit_kids">Edit kids</string>
     <string name="cd_more_options">More options</string>
     <string name="menu_export_backup">Export backup…</string>
+    <string name="menu_export_csv">Export spreadsheet (CSV)…</string>
     <string name="menu_restore_backup">Restore backup…</string>
     <string name="menu_manage_categories">Manage categories</string>
     <string name="tab_ledger">Ledger</string>
@@ -45,6 +46,11 @@
     <string name="kid_no_entries">No entries</string>
     <string name="remove_kid_title">Remove %1$s?</string>
     <string name="remove_kid_body">Removing %1$s will remove all entries associated with them and cannot be undone. Do you really want to do this?</string>
+
+    <!-- Restore backup confirmation -->
+    <string name="restore_confirm_title">Replace all data?</string>
+    <string name="restore_confirm_body">Restoring a backup replaces every kid, entry and category on this phone with the ones in the file. This can\'t be undone, so export a backup first if you might want your current data.</string>
+    <string name="restore_confirm_action">Choose backup</string>
 
     <!-- Categories -->
     <string name="manage_categories_title">Manage categories</string>
@@ -107,6 +113,8 @@
     <string name="message_entry_deleted">Deleted \"%1$s\"</string>
     <string name="message_export_succeeded">Exported %1$s entries to backup</string>
     <string name="message_export_failed">Backup export failed. %1$s</string>
+    <string name="message_csv_export_succeeded">Exported %1$s entries to spreadsheet</string>
+    <string name="message_csv_export_failed">Spreadsheet export failed. %1$s</string>
     <string name="message_restore_succeeded">Restored %1$s entries from backup</string>
     <string name="message_restore_failed">Restore failed. The file may not be a valid backup. %1$s</string>
 </resources>

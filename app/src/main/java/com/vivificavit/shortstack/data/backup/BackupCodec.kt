@@ -51,6 +51,9 @@ data class BackupContents(
 object BackupCodec {
     const val CURRENT_FORMAT_VERSION = 2
 
+    /** Entries dated after this (2100-01-01 UTC) are treated as corrupt. */
+    private const val MAX_TIMESTAMP = 4_102_444_800_000L
+
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
@@ -100,10 +103,20 @@ object BackupCodec {
             "This backup was made by a newer version of the app."
         }
 
+        // Hold restored entries to the same rules as the entry form, so a
+        // hand-edited or damaged file can't bring in values the app never makes.
         val transactions = file.transactions.mapIndexed { index, tx ->
+            val entry = "Entry ${index + 1}"
             val cents = tx.amountCents
                 ?: tx.amount?.let(Money::dollarsToCents)
-                ?: throw IllegalArgumentException("Entry ${index + 1} has no amount.")
+                ?: throw IllegalArgumentException("$entry has no amount.")
+            require(cents in 1..Money.MAX_ENTRY_CENTS) {
+                "$entry has an amount outside ${Money.format(1L)} to ${Money.format(Money.MAX_ENTRY_CENTS)}."
+            }
+            require(tx.kidName.isNotBlank()) { "$entry has no kid name." }
+            require(tx.title.isNotBlank()) { "$entry has no note." }
+            require(tx.category.isNotBlank()) { "$entry has no category." }
+            require(tx.timestamp in 0..MAX_TIMESTAMP) { "$entry has an invalid date." }
             Transaction(
                 kidName = tx.kidName.trim(),
                 title = tx.title.trim(),
@@ -113,6 +126,7 @@ object BackupCodec {
                 timestamp = tx.timestamp
             )
         }
+        require(file.kids.none { it.name.isBlank() }) { "The backup has a kid with no name." }
         val kids = (file.kids.map { KidProfile(name = it.name.trim(), createdAt = it.createdAt) } +
             transactions.map { KidProfile(name = it.kidName) })
             .distinctBy { it.name }

@@ -66,6 +66,7 @@ import com.vivificavit.shortstack.ui.components.AddKidDialog
 import com.vivificavit.shortstack.ui.components.EntryBottomSheet
 import com.vivificavit.shortstack.ui.components.EditKidsDialog
 import com.vivificavit.shortstack.ui.components.ManageCategoriesDialog
+import com.vivificavit.shortstack.ui.components.RestoreBackupDialog
 import com.vivificavit.shortstack.ui.theme.EntryButtonNavy
 import com.vivificavit.shortstack.ui.viewmodel.TrackerViewModel
 import java.time.LocalDateTime
@@ -109,6 +110,7 @@ fun TrackerMainScreen(
     var showAddKidDialog by rememberSaveable { mutableStateOf(false) }
     var showEditKidsDialog by rememberSaveable { mutableStateOf(false) }
     var showManageCategoriesDialog by rememberSaveable { mutableStateOf(false) }
+    var showRestoreConfirm by rememberSaveable { mutableStateOf(false) }
     var overflowExpanded by remember { mutableStateOf(false) }
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(TrackerTab.RUNNING_TALLY.ordinal) }
     var showEntrySheet by rememberSaveable { mutableStateOf(false) }
@@ -121,6 +123,16 @@ fun TrackerMainScreen(
         uri?.let { targetUri ->
             context.contentResolver.openOutputStream(targetUri)?.let { outputStream ->
                 viewModel.exportToJson(outputStream)
+            }
+        }
+    }
+
+    val exportCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        uri?.let { targetUri ->
+            context.contentResolver.openOutputStream(targetUri)?.let { outputStream ->
+                viewModel.exportToCsv(outputStream)
             }
         }
     }
@@ -256,10 +268,18 @@ fun TrackerMainScreen(
                                 }
                             )
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_export_csv)) },
+                                onClick = {
+                                    overflowExpanded = false
+                                    val timestamp = LocalDateTime.now().format(BackupFileTimestamp)
+                                    exportCsvLauncher.launch("shortstack_entries_$timestamp.csv")
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text(stringResource(R.string.menu_restore_backup)) },
                                 onClick = {
                                     overflowExpanded = false
-                                    restoreBackupLauncher.launch(arrayOf("application/json", "*/*"))
+                                    showRestoreConfirm = true
                                 }
                             )
                             HorizontalDivider()
@@ -395,6 +415,16 @@ fun TrackerMainScreen(
             onAddKid = viewModel::addKid,
             onRemoveKid = viewModel::removeKid,
             onDismiss = { showEditKidsDialog = false }
+        )
+    }
+
+    if (showRestoreConfirm) {
+        RestoreBackupDialog(
+            onConfirm = {
+                showRestoreConfirm = false
+                restoreBackupLauncher.launch(arrayOf("application/json", "*/*"))
+            },
+            onDismiss = { showRestoreConfirm = false }
         )
     }
 

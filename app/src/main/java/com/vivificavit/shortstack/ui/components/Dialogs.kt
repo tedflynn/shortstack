@@ -308,3 +308,23 @@ fun EditKidsDialog(
         }
     )
 }
+
+/** Restoring replaces everything, so say so before the file picker opens. */
+@Composable
+fun RestoreBackupDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.restore_confirm_title)) },
+        text = { Text(stringResource(R.string.restore_confirm_body)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.restore_confirm_action), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
+    )
+}

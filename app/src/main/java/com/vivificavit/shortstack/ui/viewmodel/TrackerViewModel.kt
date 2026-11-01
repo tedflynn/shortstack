@@ -339,6 +339,18 @@ class TrackerViewModel(
         }
     }
 
+    fun exportToCsv(outputStream: OutputStream) {
+        viewModelScope.launch {
+            repository.exportToCsv(outputStream)
+                .onSuccess { count ->
+                    emitMessage(R.string.message_csv_export_succeeded, count.toString())
+                }
+                .onFailure { error ->
+                    emitMessage(R.string.message_csv_export_failed, error.localizedMessage.orEmpty())
+                }
+        }
+    }
+
     fun importFromJson(inputStream: InputStream) {
         viewModelScope.launch {
             repository.importFromJson(inputStream, replaceExisting = true)

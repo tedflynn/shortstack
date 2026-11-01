@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# The build only needs to read the code; it can't push, tag or edit issues.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

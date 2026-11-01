@@ -2,6 +2,7 @@ package com.vivificavit.shortstack.repository
 
 import androidx.room.withTransaction
 import com.vivificavit.shortstack.data.backup.BackupCodec
+import com.vivificavit.shortstack.data.export.CsvExport
 import com.vivificavit.shortstack.data.local.AppDatabase
 import com.vivificavit.shortstack.data.local.CategorySum
 import com.vivificavit.shortstack.data.model.CategoryEntity
@@ -12,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -129,6 +131,15 @@ class TransactionRepository(
         }
     }
 
+    /** Writes every entry as a spreadsheet. Closes [outputStream]. */
+    suspend fun exportToCsv(outputStream: OutputStream): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            val transactions = transactionDao.getAllTransactions().first()
+            outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(CsvExport.encode(transactions)) }
+            transactions.size
+        }
+    }
+
     /**
      * Restores a backup. The file is fully validated before the database is
      * touched, and the replace runs in one database transaction, so a failure
@@ -139,7 +150,7 @@ class TransactionRepository(
         replaceExisting: Boolean = false
     ): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
-            val rawJson = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val rawJson = inputStream.use { readAtMost(it, MAX_BACKUP_BYTES) }.toString(Charsets.UTF_8)
             val backup = BackupCodec.decode(rawJson)
             database.withTransaction {
                 if (replaceExisting) {
@@ -150,6 +161,23 @@ class TransactionRepository(
                 transactionDao.insertAll(backup.transactions)
             }
             backup.transactions.size
+        }
+    }
+
+    companion object {
+        /** Real backups are a few hundred KB at most; this stops a wrong pick from exhausting memory. */
+        const val MAX_BACKUP_BYTES = 10 * 1024 * 1024
+
+        private fun readAtMost(input: InputStream, limit: Int): ByteArray {
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                out.write(buffer, 0, read)
+                require(out.size() <= limit) { "The file is too large to be a backup." }
+            }
+            return out.toByteArray()
         }
     }
 }
