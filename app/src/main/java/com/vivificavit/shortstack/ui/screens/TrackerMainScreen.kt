@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -59,7 +61,9 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.ui.components.AddKidDialog
@@ -120,31 +124,19 @@ fun TrackerMainScreen(
     val exportBackupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri: Uri? ->
-        uri?.let { targetUri ->
-            context.contentResolver.openOutputStream(targetUri)?.let { outputStream ->
-                viewModel.exportToJson(outputStream)
-            }
-        }
+        uri?.let { targetUri -> viewModel.exportToJson { context.contentResolver.openOutputStream(targetUri) } }
     }
 
     val exportCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
     ) { uri: Uri? ->
-        uri?.let { targetUri ->
-            context.contentResolver.openOutputStream(targetUri)?.let { outputStream ->
-                viewModel.exportToCsv(outputStream)
-            }
-        }
+        uri?.let { targetUri -> viewModel.exportToCsv { context.contentResolver.openOutputStream(targetUri) } }
     }
 
     val restoreBackupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let { sourceUri ->
-            context.contentResolver.openInputStream(sourceUri)?.let { inputStream ->
-                viewModel.importFromJson(inputStream)
-            }
-        }
+        uri?.let { sourceUri -> viewModel.importFromJson { context.contentResolver.openInputStream(sourceUri) } }
     }
 
     LaunchedEffect(viewModel) {
@@ -166,8 +158,10 @@ fun TrackerMainScreen(
                 TopAppBar(
                     navigationIcon = {
                         Box(modifier = Modifier.padding(start = 8.dp)) {
+                            // Capped so a long name truncates instead of crowding out the logo.
                             OutlinedButton(
                                 onClick = { kidMenuExpanded = true },
+                                modifier = Modifier.widthIn(max = 180.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Icon(
@@ -180,7 +174,10 @@ fun TrackerMainScreen(
                                     // Blank while loading, so "Add kid" only shows when there really are none.
                                     text = selectedKid
                                         ?: if (hasNoKids) stringResource(R.string.kid_menu_none) else "",
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
                                 Icon(
                                     imageVector = Icons.Default.ArrowDropDown,
@@ -306,7 +303,13 @@ fun TrackerMainScreen(
                                         FontWeight.Bold
                                     } else {
                                         FontWeight.Medium
-                                    }
+                                    },
+                                    maxLines = 1,
+                                    // Shrinks a label that doesn't fit at large text sizes, rather than breaking the word.
+                                    autoSize = TextAutoSize.StepBased(
+                                        minFontSize = 10.sp,
+                                        maxFontSize = MaterialTheme.typography.titleSmall.fontSize
+                                    )
                                 )
                             }
                         )

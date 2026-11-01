@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -114,9 +115,9 @@ class TransactionRepository(
     }
 
     /** Writes every kid, category and transaction. Closes [outputStream]. */
-    suspend fun exportToJson(outputStream: OutputStream): Result<Int> = withContext(Dispatchers.IO) {
+    suspend fun exportToJson(openStream: () -> OutputStream?): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
-            outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+            open(openStream).bufferedWriter(Charsets.UTF_8).use { writer ->
                 val payload = database.withTransaction {
                     val transactions = transactionDao.getAllTransactions().first()
                     BackupCodec.encode(
@@ -131,11 +132,11 @@ class TransactionRepository(
         }
     }
 
-    /** Writes every entry as a spreadsheet. Closes [outputStream]. */
-    suspend fun exportToCsv(outputStream: OutputStream): Result<Int> = withContext(Dispatchers.IO) {
+    /** Writes every entry as a spreadsheet to the stream [openStream] gives, and closes it. */
+    suspend fun exportToCsv(openStream: () -> OutputStream?): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
             val transactions = transactionDao.getAllTransactions().first()
-            outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(CsvExport.encode(transactions)) }
+            open(openStream).bufferedWriter(Charsets.UTF_8).use { it.write(CsvExport.encode(transactions)) }
             transactions.size
         }
     }
@@ -143,18 +144,21 @@ class TransactionRepository(
     /**
      * Restores a backup. The file is fully validated before the database is
      * touched, and the replace runs in one database transaction, so a failure
-     * leaves existing data exactly as it was. Closes [inputStream].
+     * leaves existing data exactly as it was. Closes the stream [openStream] gives.
      */
     suspend fun importFromJson(
-        inputStream: InputStream,
+        openStream: () -> InputStream?,
         replaceExisting: Boolean = false
     ): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
-            val rawJson = inputStream.use { readAtMost(it, MAX_BACKUP_BYTES) }.toString(Charsets.UTF_8)
+            val rawJson = open(openStream).use { readAtMost(it, MAX_BACKUP_BYTES) }.toString(Charsets.UTF_8)
             val backup = BackupCodec.decode(rawJson)
             database.withTransaction {
                 if (replaceExisting) {
+                    // Everything goes, so kids and categories missing from the backup don't linger.
                     transactionDao.deleteAll()
+                    transactionDao.deleteAllKids()
+                    transactionDao.deleteAllCategories()
                 }
                 backup.kids.forEach { transactionDao.insertKid(it) }
                 backup.categories.forEach { transactionDao.insertCategory(CategoryEntity(name = it)) }
@@ -167,6 +171,13 @@ class TransactionRepository(
     companion object {
         /** Real backups are a few hundred KB at most; this stops a wrong pick from exhausting memory. */
         const val MAX_BACKUP_BYTES = 10 * 1024 * 1024
+
+        /**
+         * Opens a picked file here, on the IO thread and inside the caller's runCatching,
+         * so a provider that fails (Drive offline, file gone) reports an error, not a crash.
+         */
+        private fun <T> open(openStream: () -> T?): T =
+            openStream() ?: throw IOException("Couldn't open the file.")
 
         private fun readAtMost(input: InputStream, limit: Int): ByteArray {
             val out = ByteArrayOutputStream()

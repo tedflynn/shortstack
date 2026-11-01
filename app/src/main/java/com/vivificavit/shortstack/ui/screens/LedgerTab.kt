@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +59,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.launch
+
+/** Above this system font scale, rows stack the amount under the note. */
+private const val LargeTextScale = 1.3f
 
 /** Shows nothing until [ledger] has loaded, so an empty ledger never flashes up. */
 @Composable
@@ -189,6 +195,7 @@ fun SwipeableTransactionItem(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TransactionRowCard(
     transaction: Transaction,
@@ -203,6 +210,8 @@ fun TransactionRowCard(
         val skeleton = if (date.year == LocalDate.now().year) "MMMd" else "yMMMd"
         date.format(DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, skeleton), locale))
     }
+    // With large system text, the amount moves under the note so the row isn't squeezed.
+    val largeText = LocalDensity.current.fontScale > LargeTextScale
 
     val isCredit = transaction.type == TransactionType.CREDIT
     val amountColor = if (isCredit) CreditGreen else DebitRed
@@ -210,6 +219,14 @@ fun TransactionRowCard(
         "+${Money.format(transaction.amountCents)}"
     } else {
         "-${Money.format(transaction.amountCents)}"
+    }
+    val amount = @Composable {
+        Text(
+            text = formattedSignedAmount,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = amountColor
+        )
     }
 
     Card(
@@ -252,13 +269,15 @@ fun TransactionRowCard(
                         text = transaction.title,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
+                        maxLines = if (largeText) 2 else 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // The date drops to its own line when it doesn't fit beside the category.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -274,19 +293,19 @@ fun TransactionRowCard(
                         Text(
                             text = shortDate,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
                         )
+                    }
+                    if (largeText) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        amount()
                     }
                 }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = formattedSignedAmount,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = amountColor
-                )
+                if (!largeText) amount()
                 IconButton(onClick = onDeleteClick) {
                     Icon(
                         imageVector = Icons.Default.Delete,

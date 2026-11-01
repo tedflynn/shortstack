@@ -327,9 +327,9 @@ class TrackerViewModel(
         }
     }
 
-    fun exportToJson(outputStream: OutputStream) {
+    fun exportToJson(openStream: () -> OutputStream?) {
         viewModelScope.launch {
-            repository.exportToJson(outputStream)
+            repository.exportToJson(openStream)
                 .onSuccess { count ->
                     emitMessage(R.string.message_export_succeeded, count.toString())
                 }
@@ -339,9 +339,9 @@ class TrackerViewModel(
         }
     }
 
-    fun exportToCsv(outputStream: OutputStream) {
+    fun exportToCsv(openStream: () -> OutputStream?) {
         viewModelScope.launch {
-            repository.exportToCsv(outputStream)
+            repository.exportToCsv(openStream)
                 .onSuccess { count ->
                     emitMessage(R.string.message_csv_export_succeeded, count.toString())
                 }
@@ -351,9 +351,9 @@ class TrackerViewModel(
         }
     }
 
-    fun importFromJson(inputStream: InputStream) {
+    fun importFromJson(openStream: () -> InputStream?) {
         viewModelScope.launch {
-            repository.importFromJson(inputStream, replaceExisting = true)
+            repository.importFromJson(openStream, replaceExisting = true)
                 .onSuccess { count ->
                     emitMessage(R.string.message_restore_succeeded, count.toString())
                 }

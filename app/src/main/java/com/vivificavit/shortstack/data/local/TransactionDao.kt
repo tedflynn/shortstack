@@ -83,6 +83,12 @@ interface TransactionDao {
     @Query("DELETE FROM transactions")
     suspend fun deleteAll()
 
+    @Query("DELETE FROM kids")
+    suspend fun deleteAllKids()
+
+    @Query("DELETE FROM categories")
+    suspend fun deleteAllCategories()
+
     @Query(
         """
         SELECT 

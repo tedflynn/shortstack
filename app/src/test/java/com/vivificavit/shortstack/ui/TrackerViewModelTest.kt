@@ -29,6 +29,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.io.FileNotFoundException
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -214,9 +215,38 @@ class TrackerViewModelTest {
         repository.insertTransaction(existing)
 
         val tooBig = ByteArray(TransactionRepository.MAX_BACKUP_BYTES + 1) { ' '.code.toByte() }
-        val result = repository.importFromJson(tooBig.inputStream(), replaceExisting = true)
+        val result = repository.importFromJson({ tooBig.inputStream() }, replaceExisting = true)
 
         assertTrue(result.isFailure)
         assertEquals(listOf("Comic"), repository.getTransactionsForKid("Sam").first().map { it.title })
+    }
+
+    @Test
+    fun restoreReplacesKidsAndCategoriesToo() = runBlocking {
+        repository.insertKid("Max")
+        repository.addCategory("Old category")
+        repository.insertTransaction(
+            Transaction(kidName = "Max", title = "Comic", amountCents = 300, type = TransactionType.DEBIT)
+        )
+        val backup = """{"kids":[{"name":"Sam"}],"categories":["Job"],"transactions":[
+            {"kidName":"Sam","title":"Lawn","amountCents":500,"type":"CREDIT","category":"Job","timestamp":1}]}"""
+
+        assertTrue(repository.importFromJson({ backup.byteInputStream() }, replaceExisting = true).isSuccess)
+
+        assertEquals(listOf("Sam"), repository.kidNames.first())
+        assertEquals(listOf("Job"), repository.categories.first())
+        assertEquals(listOf("Lawn"), repository.allTransactions.first().map { it.title })
+    }
+
+    @Test
+    fun fileThatCantBeOpenedFailsWithoutCrashingOrTouchingData() = runBlocking {
+        repository.insertTransaction(
+            Transaction(kidName = "Sam", title = "Comic", amountCents = 300, type = TransactionType.DEBIT)
+        )
+
+        assertTrue(repository.importFromJson({ throw FileNotFoundException("gone") }, replaceExisting = true).isFailure)
+        assertTrue(repository.exportToJson { null }.isFailure)
+        assertTrue(repository.exportToCsv { throw SecurityException("no access") }.isFailure)
+        assertEquals(listOf("Comic"), repository.allTransactions.first().map { it.title })
     }
 }
