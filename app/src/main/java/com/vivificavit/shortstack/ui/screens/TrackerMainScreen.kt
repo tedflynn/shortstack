@@ -102,6 +102,8 @@ fun TrackerMainScreen(
     val incomeSums by viewModel.incomeSums.collectAsStateWithLifecycle()
     val spendingSums by viewModel.spendingSums.collectAsStateWithLifecycle()
     val hiddenCategories by viewModel.hiddenCategories.collectAsStateWithLifecycle()
+    val categoryIcons by viewModel.categoryIcons.collectAsStateWithLifecycle()
+    val notesByCategory by viewModel.notesByCategory.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val usedCategories by viewModel.usedCategories.collectAsStateWithLifecycle()
     val kidsWithEntries by viewModel.kidsWithEntries.collectAsStateWithLifecycle()
@@ -356,6 +358,7 @@ fun TrackerMainScreen(
                 RunningTallyTabContent(
                     kidName = kidName,
                     ledger = ledger,
+                    categoryIcons = categoryIcons,
                     onEditTransaction = { transaction ->
                         editingEntryId = transaction.id
                         showEntrySheet = true
@@ -435,7 +438,10 @@ fun TrackerMainScreen(
         ManageCategoriesDialog(
             categories = categories,
             usedCategories = usedCategories,
+            categoryIcons = categoryIcons,
+            notesByCategory = notesByCategory,
             onAddCategory = viewModel::addCategory,
+            onSetCategoryIcon = viewModel::setCategoryIcon,
             onDeleteUnusedCategory = viewModel::deleteUnusedCategory,
             onDismiss = { showManageCategoriesDialog = false }
         )

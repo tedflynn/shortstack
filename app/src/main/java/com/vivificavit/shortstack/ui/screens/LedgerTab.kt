@@ -39,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
+import com.vivificavit.shortstack.ui.icons.EntryIcons
 import com.vivificavit.shortstack.ui.viewmodel.LedgerState
 import com.vivificavit.shortstack.ui.theme.CategoryTagBackground
 import com.vivificavit.shortstack.ui.theme.CategoryTagText
@@ -68,6 +70,7 @@ private const val LargeTextScale = 1.3f
 fun RunningTallyTabContent(
     kidName: String,
     ledger: LedgerState?,
+    categoryIcons: Map<String, String>,
     onEditTransaction: (Transaction) -> Unit,
     onDeleteTransaction: (Transaction) -> Unit,
     modifier: Modifier = Modifier
@@ -103,6 +106,9 @@ fun RunningTallyTabContent(
             ) { transaction ->
                 SwipeableTransactionItem(
                     transaction = transaction,
+                    icon = remember(transaction, categoryIcons) {
+                        EntryIcons.forEntry(transaction, categoryIcons).vector
+                    },
                     onClick = { onEditTransaction(transaction) },
                     onDelete = { onDeleteTransaction(transaction) }
                 )
@@ -153,6 +159,7 @@ fun BalanceHeaderCard(
 @Composable
 fun SwipeableTransactionItem(
     transaction: Transaction,
+    icon: ImageVector,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -188,6 +195,7 @@ fun SwipeableTransactionItem(
         content = {
             TransactionRowCard(
                 transaction = transaction,
+                icon = icon,
                 onClick = onClick,
                 onDeleteClick = onDelete
             )
@@ -199,6 +207,7 @@ fun SwipeableTransactionItem(
 @Composable
 fun TransactionRowCard(
     transaction: Transaction,
+    icon: ImageVector,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -256,11 +265,13 @@ fun TransactionRowCard(
                         .background(amountColor.copy(alpha = 0.14f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = if (isCredit) "+" else "-",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = amountColor
+                    // Decorative: the category and signed amount beside it say the same thing.
+                    // Green or red keeps income and expenses easy to tell apart at a glance.
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = amountColor,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))

@@ -15,7 +15,9 @@ data class BackupFile(
     val formatVersion: Int = BackupCodec.CURRENT_FORMAT_VERSION,
     val kids: List<BackupKid> = emptyList(),
     val categories: List<String> = emptyList(),
-    val transactions: List<BackupTransaction> = emptyList()
+    val transactions: List<BackupTransaction> = emptyList(),
+    /** Category name -> icon key, for categories with an icon the user picked. Optional. */
+    val categoryIcons: Map<String, String> = emptyMap()
 )
 
 @Serializable
@@ -41,7 +43,9 @@ data class BackupTransaction(
 data class BackupContents(
     val kids: List<KidProfile>,
     val categories: List<String>,
-    val transactions: List<Transaction>
+    val transactions: List<Transaction>,
+    /** Lower-cased category name -> icon key. */
+    val categoryIcons: Map<String, String> = emptyMap()
 )
 
 /**
@@ -54,6 +58,8 @@ object BackupCodec {
     /** Entries dated after this (2100-01-01 UTC) are treated as corrupt. */
     private const val MAX_TIMESTAMP = 4_102_444_800_000L
 
+    private const val MAX_ICON_KEY_LENGTH = 40
+
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
@@ -63,7 +69,8 @@ object BackupCodec {
     fun encode(
         kids: List<KidProfile>,
         categories: List<String>,
-        transactions: List<Transaction>
+        transactions: List<Transaction>,
+        categoryIcons: Map<String, String> = emptyMap()
     ): String = json.encodeToString(
         BackupFile.serializer(),
         BackupFile(
@@ -78,7 +85,8 @@ object BackupCodec {
                     category = it.category,
                     timestamp = it.timestamp
                 )
-            }
+            },
+            categoryIcons = categoryIcons
         )
     )
 
@@ -133,6 +141,16 @@ object BackupCodec {
         val categories = (file.categories.map { it.trim() } + transactions.map { it.category })
             .filter { it.isNotBlank() }
             .distinct()
-        return BackupContents(kids = kids, categories = categories, transactions = transactions)
+        // Icons are cosmetic: one that's malformed is dropped rather than failing the restore,
+        // and a key this version doesn't know just falls back to an automatic icon.
+        val categoryIcons = file.categoryIcons
+            .filter { (name, icon) -> name.isNotBlank() && icon.isNotBlank() && icon.length <= MAX_ICON_KEY_LENGTH }
+            .mapKeys { (name, _) -> name.trim().lowercase() }
+        return BackupContents(
+            kids = kids,
+            categories = categories,
+            transactions = transactions,
+            categoryIcons = categoryIcons
+        )
     }
 }

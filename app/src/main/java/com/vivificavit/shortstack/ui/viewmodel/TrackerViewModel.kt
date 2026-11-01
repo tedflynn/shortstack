@@ -95,6 +95,14 @@ class TrackerViewModel(
             initialValue = DefaultCategories.DEFAULT_CATEGORIES
         )
 
+    /** Icons the user picked, keyed by lower-cased category name. */
+    val categoryIcons: StateFlow<Map<String, String>> = repository.categoryIcons
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyMap()
+        )
+
     /**
      * The category of the most recent entry of each type (across all kids), used to
      * pre-select the category in the entry form. Types with no entries are absent.
@@ -119,6 +127,16 @@ class TrackerViewModel(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = emptySet()
+            )
+
+    /** Every entry's note, keyed by lower-cased category, for suggesting category icons. */
+    val notesByCategory: StateFlow<Map<String, List<String>>> =
+        repository.allTransactions
+            .map { list -> list.groupBy({ it.category.lowercase() }, { it.title }) }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = emptyMap()
             )
 
     val usedCategories: StateFlow<Set<String>> =
@@ -263,6 +281,11 @@ class TrackerViewModel(
             repository.addCategory(trimmed)
             emitMessage(R.string.message_category_added, trimmed)
         }
+    }
+
+    /** Sets the icon for [category]; null goes back to picking one automatically. */
+    fun setCategoryIcon(category: String, iconKey: String?) {
+        viewModelScope.launch { repository.setCategoryIcon(category, iconKey) }
     }
 
     fun deleteUnusedCategory(name: String) {

@@ -74,6 +74,23 @@ class BackupCodecTest {
         assertEquals(100_000_000L, decoded.transactions.single().amountCents)
     }
 
+    @Test
+    fun roundTripsChosenCategoryIcons() {
+        val raw = BackupCodec.encode(
+            kids = listOf(KidProfile(name = "Sam")),
+            categories = listOf("Job", "Snacks"),
+            transactions = emptyList(),
+            categoryIcons = mapOf("Snacks" to "candy")
+        )
+        assertEquals(mapOf("snacks" to "candy"), BackupCodec.decode(raw).categoryIcons)
+    }
+
+    @Test
+    fun dropsMalformedIconsWithoutFailingTheRestore() {
+        val raw = """{"categories":["Job"],"categoryIcons":{"Job":"work"," ":"star","Snacks":"","Toy":"${"x".repeat(41)}"}}"""
+        assertEquals(mapOf("job" to "work"), BackupCodec.decode(raw).categoryIcons)
+    }
+
     /** A one-entry backup that's valid unless a field is overridden. */
     private fun entry(
         amountCents: Long = 500,

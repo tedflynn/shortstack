@@ -33,7 +33,9 @@ data class KidProfile(
 data class CategoryEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,
-    val name: String
+    val name: String,
+    /** The icon key the user picked (see EntryIcons); null picks one automatically. */
+    val icon: String? = null
 ) {
     init {
         require(name.isNotBlank()) { "Category name cannot be blank." }

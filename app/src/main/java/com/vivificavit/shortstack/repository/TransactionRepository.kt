@@ -12,6 +12,7 @@ import com.vivificavit.shortstack.data.model.Transaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -26,6 +27,11 @@ class TransactionRepository(
     val kidNames: Flow<List<String>> = transactionDao.getAllKidNames()
 
     val categories: Flow<List<String>> = transactionDao.getAllCategoryNames()
+
+    /** Icons the user picked, keyed by lower-cased category name. */
+    val categoryIcons: Flow<Map<String, String>> = transactionDao.getAllCategories().map { list ->
+        list.mapNotNull { category -> category.icon?.let { category.name.lowercase() to it } }.toMap()
+    }
 
     val allTransactions: Flow<List<Transaction>> = transactionDao.getAllTransactions()
 
@@ -91,6 +97,13 @@ class TransactionRepository(
         }
     }
 
+    /** Sets the icon for [name]; null goes back to picking one automatically. */
+    suspend fun setCategoryIcon(name: String, icon: String?) {
+        withContext(Dispatchers.IO) {
+            transactionDao.setCategoryIcon(name.trim(), icon)
+        }
+    }
+
     suspend fun deleteUnusedCategory(name: String): Boolean {
         return withContext(Dispatchers.IO) {
             val deletedRows = transactionDao.deleteUnusedCategory(name.trim())
@@ -120,10 +133,12 @@ class TransactionRepository(
             open(openStream).bufferedWriter(Charsets.UTF_8).use { writer ->
                 val payload = database.withTransaction {
                     val transactions = transactionDao.getAllTransactions().first()
+                    val categories = transactionDao.getAllCategoriesOnce()
                     BackupCodec.encode(
                         kids = transactionDao.getAllKidsOnce(),
-                        categories = transactionDao.getAllCategoryNamesOnce(),
-                        transactions = transactions
+                        categories = categories.map { it.name },
+                        transactions = transactions,
+                        categoryIcons = categories.mapNotNull { c -> c.icon?.let { c.name to it } }.toMap()
                     ) to transactions.size
                 }
                 writer.write(payload.first)
@@ -161,7 +176,9 @@ class TransactionRepository(
                     transactionDao.deleteAllCategories()
                 }
                 backup.kids.forEach { transactionDao.insertKid(it) }
-                backup.categories.forEach { transactionDao.insertCategory(CategoryEntity(name = it)) }
+                backup.categories.forEach { name ->
+                    transactionDao.insertCategory(CategoryEntity(name = name, icon = backup.categoryIcons[name.lowercase()]))
+                }
                 transactionDao.insertAll(backup.transactions)
             }
             backup.transactions.size

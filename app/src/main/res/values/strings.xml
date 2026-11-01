@@ -55,6 +55,11 @@
     <!-- Categories -->
     <string name="manage_categories_title">Manage categories</string>
     <string name="manage_categories_new">New category</string>
+    <string name="cd_change_icon">Change icon for %1$s</string>
+    <string name="category_icon_title">Icon for %1$s</string>
+    <string name="category_icon_automatic">Automatic</string>
+    <string name="category_icon_suggested">Suggested</string>
+    <string name="category_icon_hint">Automatic picks an icon from each entry\'s note, or else from the category name. Choosing an icon uses it for every entry in this category.</string>
     <string name="category_in_use">In use</string>
     <string name="category_unused">Unused</string>
 
@@ -117,4 +122,82 @@
     <string name="message_csv_export_failed">Spreadsheet export failed. %1$s</string>
     <string name="message_restore_succeeded">Restored %1$s entries from backup</string>
     <string name="message_restore_failed">Restore failed. The file may not be a valid backup. %1$s</string>
+
+    <!-- Entry and category icons (screen reader labels) -->
+    <string name="icon_money">Money</string>
+    <string name="icon_payments">Payment</string>
+    <string name="icon_wallet">Wallet</string>
+    <string name="icon_card">Card</string>
+    <string name="icon_savings">Piggy bank</string>
+    <string name="icon_work">Work</string>
+    <string name="icon_gift">Gift</string>
+    <string name="icon_cake">Birthday</string>
+    <string name="icon_celebration">Celebration</string>
+    <string name="icon_star">Reward</string>
+    <string name="icon_cleaning">Cleaning</string>
+    <string name="icon_yard">Yard work</string>
+    <string name="icon_pets">Pets</string>
+    <string name="icon_laundry">Laundry</string>
+    <string name="icon_handyman">Repairs</string>
+    <string name="icon_babysitting">Babysitting</string>
+    <string name="icon_book">Book</string>
+    <string name="icon_book_open">Open book</string>
+    <string name="icon_books">Books</string>
+    <string name="icon_school">School</string>
+    <string name="icon_art">Art</string>
+    <string name="icon_science">Science</string>
+    <string name="icon_music">Music</string>
+    <string name="icon_game">Video game</string>
+    <string name="icon_gamepad">Game controller</string>
+    <string name="icon_toy">Toy</string>
+    <string name="icon_puzzle">Puzzle</string>
+    <string name="icon_dice">Board game</string>
+    <string name="icon_movie">Movie</string>
+    <string name="icon_tv">TV</string>
+    <string name="icon_headphones">Headphones</string>
+    <string name="icon_camera">Camera</string>
+    <string name="icon_phone">Phone</string>
+    <string name="icon_computer">Computer</string>
+    <string name="icon_soccer">Soccer</string>
+    <string name="icon_basketball">Basketball</string>
+    <string name="icon_baseball">Baseball</string>
+    <string name="icon_football">Football</string>
+    <string name="icon_tennis">Tennis</string>
+    <string name="icon_swimming">Swimming</string>
+    <string name="icon_bike">Bike</string>
+    <string name="icon_skateboard">Skateboarding</string>
+    <string name="icon_hiking">Hiking</string>
+    <string name="icon_food">Fast food</string>
+    <string name="icon_lunch">Lunch</string>
+    <string name="icon_pizza">Pizza</string>
+    <string name="icon_bakery">Bakery</string>
+    <string name="icon_icecream">Ice cream</string>
+    <string name="icon_candy">Treats</string>
+    <string name="icon_cafe">Drinks</string>
+    <string name="icon_restaurant">Restaurant</string>
+    <string name="icon_groceries">Groceries</string>
+    <string name="icon_shopping">Shopping</string>
+    <string name="icon_clothes">Clothes</string>
+    <string name="icon_jewelry">Jewelry</string>
+    <string name="icon_car">Car</string>
+    <string name="icon_bus">Bus or train</string>
+    <string name="icon_travel">Travel</string>
+    <string name="icon_beach">Beach</string>
+    <string name="icon_park">Park</string>
+    <string name="icon_ticket">Tickets</string>
+    <string name="icon_charity">Charity</string>
+    <string name="icon_heart">Love</string>
+    <string name="icon_health">Health</string>
+    <string name="icon_haircut">Haircut</string>
+
+    <!-- Icon picker groups -->
+    <string name="icon_theme_money">Money and gifts</string>
+    <string name="icon_theme_chores">Chores</string>
+    <string name="icon_theme_school">School and hobbies</string>
+    <string name="icon_theme_fun">Games and gadgets</string>
+    <string name="icon_theme_sports">Sports and outdoors</string>
+    <string name="icon_theme_food">Food and treats</string>
+    <string name="icon_theme_shopping">Shopping</string>
+    <string name="icon_theme_outings">Getting around</string>
+    <string name="icon_theme_other">Giving and other</string>
 </resources>

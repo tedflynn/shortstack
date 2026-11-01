@@ -40,8 +40,9 @@ class MigrationTest {
         context.deleteDatabase(dbName)
     }
 
-    private fun createVersion3Database() {
-        val schema = File("schemas/${AppDatabase::class.java.name}/3.json").readText()
+    /** Creates the tables exactly as exported for [version], and returns the open database. */
+    private fun createDatabase(version: Int): SQLiteDatabase {
+        val schema = File("schemas/${AppDatabase::class.java.name}/$version.json").readText()
         val database = Json.parseToJsonElement(schema).jsonObject["database"]!!.jsonObject
         val db = SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(dbName), null)
         database["entities"]!!.jsonArray.forEach { entity ->
@@ -52,7 +53,12 @@ class MigrationTest {
             }
         }
         database["setupQueries"]!!.jsonArray.forEach { db.execSQL(it.jsonPrimitive.content) }
+        db.version = version
+        return db
+    }
 
+    private fun createVersion3Database() {
+        val db = createDatabase(3)
         db.execSQL("INSERT INTO kids (name, createdAt) VALUES ('Maya', 1)")
         db.execSQL("INSERT INTO categories (name) VALUES ('Allowance'), ('Toy')")
         val rows = listOf(
@@ -67,18 +73,40 @@ class MigrationTest {
                 arrayOf<Any>("Maya", "Entry $i", amount, type, category, 1_000L + i)
             )
         }
-        db.version = 3
         db.close()
+    }
+
+    private fun openAppDatabase(): AppDatabase =
+        Room.databaseBuilder(context, AppDatabase::class.java, dbName)
+            .addMigrations(*AppDatabase.ALL_MIGRATIONS)
+            .allowMainThreadQueries()
+            .build()
+
+    @Test
+    fun migrate4To5KeepsCategoriesWithAutomaticIcons() = runTest {
+        createDatabase(4).apply {
+            execSQL("INSERT INTO categories (name) VALUES ('Allowance'), ('Snacks')")
+            close()
+        }
+
+        val appDb = openAppDatabase()
+        try {
+            val dao = appDb.transactionDao()
+            val categories = dao.getAllCategoriesOnce()
+            assertEquals(listOf("Allowance", "Snacks"), categories.map { it.name })
+            assertEquals(listOf(null, null), categories.map { it.icon })
+            dao.setCategoryIcon("snacks", "candy")
+            assertEquals("candy", dao.getAllCategoriesOnce().last().icon)
+        } finally {
+            appDb.close()
+        }
     }
 
     @Test
     fun migrate3To4KeepsEveryTransactionInCents() = runTest {
         createVersion3Database()
 
-        val appDb = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-            .addMigrations(*AppDatabase.ALL_MIGRATIONS)
-            .allowMainThreadQueries()
-            .build()
+        val appDb = openAppDatabase()
         try {
             val dao = appDb.transactionDao()
             val transactions = dao.getAllTransactions().first()

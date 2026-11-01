@@ -45,6 +45,15 @@ interface TransactionDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertCategory(category: CategoryEntity): Long
 
+    @Query("SELECT * FROM categories ORDER BY id ASC")
+    fun getAllCategories(): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM categories ORDER BY id ASC")
+    suspend fun getAllCategoriesOnce(): List<CategoryEntity>
+
+    @Query("UPDATE categories SET icon = :icon WHERE LOWER(name) = LOWER(:name)")
+    suspend fun setCategoryIcon(name: String, icon: String?)
+
     @Query(
         """
         SELECT COUNT(*) FROM transactions

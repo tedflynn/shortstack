@@ -17,7 +17,7 @@ import com.vivificavit.shortstack.data.model.Transaction
  */
 @Database(
     entities = [Transaction::class, KidProfile::class, CategoryEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -57,7 +57,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        val ALL_MIGRATIONS = arrayOf(MIGRATION_3_4)
+        /** v4 -> v5: categories can store an icon the user picked. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `categories` ADD COLUMN `icon` TEXT")
+            }
+        }
+
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_3_4, MIGRATION_4_5)
 
         @Volatile
         private var INSTANCE: AppDatabase? = null

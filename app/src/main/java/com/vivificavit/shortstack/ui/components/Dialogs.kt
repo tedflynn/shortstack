@@ -1,21 +1,34 @@
 package com.vivificavit.shortstack.ui.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -30,21 +43,42 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.vivificavit.shortstack.R
+import com.vivificavit.shortstack.ui.icons.EntryIcon
+import com.vivificavit.shortstack.ui.icons.EntryIcons
 
 @Composable
 fun ManageCategoriesDialog(
     categories: List<String>,
     usedCategories: Set<String>,
+    categoryIcons: Map<String, String>,
+    notesByCategory: Map<String, List<String>>,
     onAddCategory: (String) -> Unit,
+    onSetCategoryIcon: (category: String, iconKey: String?) -> Unit,
     onDeleteUnusedCategory: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var newCategoryInput by rememberSaveable { mutableStateOf("") }
+    var pickingIconFor by rememberSaveable { mutableStateOf<String?>(null) }
+
+    pickingIconFor?.let { category ->
+        CategoryIconDialog(
+            category = category,
+            chosenKey = categoryIcons[category.lowercase()],
+            notes = notesByCategory[category.lowercase()].orEmpty(),
+            onPick = { key ->
+                onSetCategoryIcon(category, key)
+                pickingIconFor = null
+            },
+            onDismiss = { pickingIconFor = null }
+        )
+    }
     fun addCategory() {
         if (newCategoryInput.isNotBlank()) {
             onAddCategory(newCategoryInput.trim())
@@ -87,14 +121,22 @@ fun ManageCategoriesDialog(
                 ) {
                     items(categories, key = { it }) { catName ->
                         val isUsed = usedCategories.contains(catName.lowercase())
+                        val icon = EntryIcons.forKey(categoryIcons[catName.lowercase()])
+                            ?: EntryIcons.automaticForCategory(catName)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            IconButton(onClick = { pickingIconFor = catName }) {
+                                Icon(
+                                    imageVector = icon?.vector ?: EntryIcons.noMatch,
+                                    contentDescription = stringResource(R.string.cd_change_icon, catName),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = catName,
                                     style = MaterialTheme.typography.bodyMedium,
@@ -327,4 +369,105 @@ fun RestoreBackupDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
             }
         }
     )
+}
+
+/**
+ * Picks the icon for [category], or Automatic (null) to let each entry's note and the
+ * category's name choose. Icons related to the category's name and its entries' [notes]
+ * come first, then every icon grouped by theme. Picking anything closes the dialog.
+ */
+@Composable
+private fun CategoryIconDialog(
+    category: String,
+    chosenKey: String?,
+    notes: List<String>,
+    onPick: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val suggested = remember(category, notes) { EntryIcons.suggestedFor(category, notes) }
+    val themes = remember { EntryIcons.all.groupBy { it.theme } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.category_icon_title, category), fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = chosenKey == null,
+                    onClick = { onPick(null) },
+                    label = { Text(stringResource(R.string.category_icon_automatic)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(FilterChipDefaults.IconSize)
+                        )
+                    }
+                )
+                Text(
+                    text = stringResource(R.string.category_icon_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 48.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                ) {
+                    if (suggested.isNotEmpty()) {
+                        iconGroupHeading(R.string.category_icon_suggested)
+                        // Suggested icons also appear under their theme, so their keys need a prefix.
+                        items(suggested, key = { "suggested_${it.key}" }) { option ->
+                            IconChoice(option, checked = option.key == chosenKey, onPick = onPick)
+                        }
+                    }
+                    themes.forEach { (theme, icons) ->
+                        iconGroupHeading(theme.labelRes)
+                        items(icons, key = { it.key }) { option ->
+                            IconChoice(option, checked = option.key == chosenKey, onPick = onPick)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
+    )
+}
+
+/** A heading that spans the whole row of the icon grid; screen readers can jump between them. */
+private fun LazyGridScope.iconGroupHeading(@StringRes labelRes: Int) {
+    item(key = "heading_$labelRes", span = { GridItemSpan(maxLineSpan) }) {
+        Text(
+            text = stringResource(labelRes),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .padding(top = 12.dp, bottom = 4.dp)
+                .semantics { heading() }
+        )
+    }
+}
+
+@Composable
+private fun IconChoice(option: EntryIcon, checked: Boolean, onPick: (String?) -> Unit) {
+    // Plain until chosen, so the chosen icon is the one that stands out.
+    IconToggleButton(
+        checked = checked,
+        onCheckedChange = { onPick(option.key) },
+        colors = IconButtonDefaults.iconToggleButtonColors(
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        )
+    ) {
+        Icon(
+            imageVector = option.vector,
+            contentDescription = stringResource(option.labelRes)
+        )
+    }
 }

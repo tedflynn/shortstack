@@ -249,4 +249,19 @@ class TrackerViewModelTest {
         assertTrue(repository.exportToCsv { throw SecurityException("no access") }.isFailure)
         assertEquals(listOf("Comic"), repository.allTransactions.first().map { it.title })
     }
+
+    @Test
+    fun chosenIconsSurviveBackupAndRestore() = runBlocking {
+        repository.addCategory("Snacks")
+        repository.setCategoryIcon("snacks", "candy")
+        assertEquals(mapOf("snacks" to "candy"), repository.categoryIcons.first())
+
+        val file = java.io.ByteArrayOutputStream()
+        assertTrue(repository.exportToJson { file }.isSuccess)
+        repository.setCategoryIcon("Snacks", null)
+        assertEquals(emptyMap<String, String>(), repository.categoryIcons.first())
+
+        assertTrue(repository.importFromJson({ file.toByteArray().inputStream() }, replaceExisting = true).isSuccess)
+        assertEquals(mapOf("snacks" to "candy"), repository.categoryIcons.first())
+    }
 }
