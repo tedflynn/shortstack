@@ -121,6 +121,19 @@ interface TransactionDao {
 
     @Query(
         """
+        SELECT
+            COALESCE(SUM(CASE WHEN type = 'CREDIT' THEN amountCents ELSE -amountCents END), 0)
+        FROM transactions
+        WHERE kidName = :kidName
+        """
+    )
+    suspend fun getBalanceForKidOnce(kidName: String): Long
+
+    @Query("SELECT * FROM transactions WHERE kidName = :kidName ORDER BY timestamp DESC, id DESC")
+    suspend fun getTransactionsForKidOnce(kidName: String): List<Transaction>
+
+    @Query(
+        """
         SELECT category, SUM(amountCents) AS totalCents
         FROM transactions
         WHERE type = 'DEBIT'

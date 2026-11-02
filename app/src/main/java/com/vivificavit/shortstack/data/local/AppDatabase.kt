@@ -7,6 +7,8 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.vivificavit.shortstack.data.model.CategoryEntity
+import com.vivificavit.shortstack.data.model.Goal
+import com.vivificavit.shortstack.data.model.GoalMove
 import com.vivificavit.shortstack.data.model.KidProfile
 import com.vivificavit.shortstack.data.model.Transaction
 
@@ -16,13 +18,15 @@ import com.vivificavit.shortstack.data.model.Transaction
  * destructive migration for versions that real users may have installed.
  */
 @Database(
-    entities = [Transaction::class, KidProfile::class, CategoryEntity::class],
-    version = 5,
+    entities = [Transaction::class, KidProfile::class, CategoryEntity::class, Goal::class, GoalMove::class],
+    version = 6,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun transactionDao(): TransactionDao
+
+    abstract fun goalDao(): GoalDao
 
     companion object {
         private const val DATABASE_NAME = "allowance_tracker_db"
@@ -64,7 +68,45 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        val ALL_MIGRATIONS = arrayOf(MIGRATION_3_4, MIGRATION_4_5)
+        /** v5 -> v6: savings goals, and the money set aside for them. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `goals` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `kidName` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `targetCents` INTEGER NOT NULL,
+                        `icon` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        `completedAt` INTEGER
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_goals_kidName` ON `goals` (`kidName`)")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `goal_moves` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `kidName` TEXT NOT NULL,
+                        `goalId` INTEGER NOT NULL,
+                        `amountCents` INTEGER NOT NULL,
+                        `reason` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `transactionId` INTEGER
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_goal_moves_kidName` ON `goal_moves` (`kidName`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_goal_moves_goalId` ON `goal_moves` (`goalId`)")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_goal_moves_transactionId` ON `goal_moves` (`transactionId`)"
+                )
+            }
+        }
+
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 
         @Volatile
         private var INSTANCE: AppDatabase? = null

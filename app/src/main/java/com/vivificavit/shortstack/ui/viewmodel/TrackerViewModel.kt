@@ -8,6 +8,8 @@ import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.data.local.CategorySum
 import com.vivificavit.shortstack.data.local.SelectedKidStore
 import com.vivificavit.shortstack.data.model.DefaultCategories
+import com.vivificavit.shortstack.data.model.Goal
+import com.vivificavit.shortstack.data.model.GoalSplit
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.repository.TransactionRepository
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -119,10 +122,11 @@ class TrackerViewModel(
                 initialValue = emptyMap()
             )
 
-    /** Kids who have at least one entry. */
+    /** Kids who have at least one entry or goal, so removing them asks first. */
     val kidsWithEntries: StateFlow<Set<String>> =
-        repository.allTransactions
-            .map { list -> list.map { tx -> tx.kidName }.toSet() }
+        combine(repository.allTransactions, repository.kidsWithGoals) { list, kidsWithGoals ->
+            list.map { tx -> tx.kidName }.toSet() + kidsWithGoals
+        }
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -177,25 +181,61 @@ class TrackerViewModel(
         }
     }
 
-    /** The selected kid's balance and entries; null until they have loaded. */
+    private class KidMoney(val kidName: String, val ledger: LedgerState, val goals: GoalsState)
+
+    /** The selected kid's entries, goals and moves, worked out together so the two tabs always agree. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val ledger: StateFlow<LedgerState?> = _selectedKid
+    private val kidMoney: StateFlow<KidMoney?> = _selectedKid
         .flatMapLatest { kidName ->
             if (kidName == null) {
                 flowOf(null)
             } else {
-                // Balance comes from the same list, so the two always match.
-                repository.getTransactionsForKid(kidName).map { entries ->
-                    val balance = entries.sumOf { if (it.type == TransactionType.CREDIT) it.amountCents else -it.amountCents }
-                    LedgerState(balance, entries)
+                repository.getMoneyForKid(kidName).map { money ->
+                    val (ledger, goalsState) = buildMoneyStates(money.transactions, money.goals, money.moves)
+                    KidMoney(kidName, ledger, goalsState)
                 }
             }
         }
         .stateIn(
             scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = null
+        )
+
+    /** The selected kid's balance and entries; null until they have loaded. */
+    val ledger: StateFlow<LedgerState?> = kidMoney
+        .map { it?.ledger }
+        .stateIn(
+            scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = null
         )
+
+    /** The selected kid's goals; null until they have loaded. */
+    val goals: StateFlow<GoalsState?> = kidMoney
+        .map { it?.goals }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = null
+        )
+
+    init {
+        // Cheer when a goal is reached, but not for ones already reached when a kid's goals load.
+        viewModelScope.launch {
+            var before: Pair<String, Set<Long>>? = null
+            kidMoney.filterNotNull().collect { money ->
+                val reached = money.goals.active.filter { it.isReached }.map { it.goal.id }.toSet()
+                val previous = before
+                if (previous != null && previous.first == money.kidName) {
+                    money.goals.active
+                        .filter { it.goal.id in reached && it.goal.id !in previous.second }
+                        .forEach { emitMessage(R.string.message_goal_reached, it.goal.name) }
+                }
+                before = money.kidName to reached
+            }
+        }
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val rawCategoryIncome = combine(
@@ -304,12 +344,18 @@ class TrackerViewModel(
         _endDateMillis.value = endMillis
     }
 
+    /**
+     * Adds an entry for the selected kid. Income can set [split] aside for a goal;
+     * spending more than pocket money takes the rest from [coverGoalId] first.
+     */
     fun addTransaction(
         title: String,
         amountCents: Long,
         type: TransactionType,
         category: String,
-        timestamp: Long = System.currentTimeMillis()
+        timestamp: Long = System.currentTimeMillis(),
+        split: GoalSplit? = null,
+        coverGoalId: Long? = null
     ) {
         val trimmedCategory = category.trim()
         if (title.isBlank() || amountCents <= 0L || trimmedCategory.isBlank()) return
@@ -324,29 +370,88 @@ class TrackerViewModel(
                 category = trimmedCategory,
                 timestamp = timestamp
             )
-            repository.insertTransaction(transaction)
+            repository.insertTransaction(transaction, split, coverGoalId)
         }
     }
 
-    /** Saves changes to an existing entry (matched by id). */
-    fun updateTransaction(transaction: Transaction) {
+    /** Saves changes to an existing entry (matched by id), replacing its goal split. */
+    fun updateTransaction(transaction: Transaction, split: GoalSplit? = null, coverGoalId: Long? = null) {
         showCategory(transaction.category)
         viewModelScope.launch {
-            repository.insertTransaction(transaction)
+            repository.insertTransaction(transaction, split, coverGoalId)
         }
     }
 
-    /** Deletes right away; the snackbar offers Undo, which puts the entry back as it was. */
+    /** Deletes right away; the snackbar offers Undo, which puts the entry and its goal money back. */
     fun deleteTransaction(transaction: Transaction) {
         viewModelScope.launch {
-            repository.deleteTransaction(transaction)
+            val deleted = repository.deleteTransaction(transaction)
             _uiMessages.emit(
                 UiMessage(
                     resId = R.string.message_entry_deleted,
                     args = listOf(transaction.title),
-                    onUndo = { viewModelScope.launch { repository.insertTransaction(transaction) } }
+                    onUndo = { viewModelScope.launch { repository.restoreEntry(deleted) } }
                 )
             )
+        }
+    }
+
+    fun addGoal(name: String, targetCents: Long, icon: String?) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank() || targetCents <= 0L) return
+        val currentKid = _selectedKid.value ?: return
+        viewModelScope.launch {
+            repository.saveGoal(Goal(kidName = currentKid, name = trimmed, targetCents = targetCents, icon = icon))
+            emitMessage(R.string.message_goal_added, trimmed)
+        }
+    }
+
+    /** Saves changes to a goal's name, target or icon. */
+    fun updateGoal(goal: Goal) {
+        viewModelScope.launch { repository.saveGoal(goal) }
+    }
+
+    /** Deletes right away, returning its money to pocket money; the snackbar offers Undo. */
+    fun deleteGoal(goal: Goal) {
+        viewModelScope.launch {
+            val deleted = repository.deleteGoal(goal)
+            _uiMessages.emit(
+                UiMessage(
+                    resId = R.string.message_goal_deleted,
+                    args = listOf(goal.name),
+                    onUndo = { viewModelScope.launch { repository.restoreGoal(deleted) } }
+                )
+            )
+        }
+    }
+
+    /** Moves money between goals, or to and from pocket money (null). */
+    fun moveMoney(fromGoalId: Long?, toGoalId: Long?, amountCents: Long) {
+        val currentKid = _selectedKid.value ?: return
+        viewModelScope.launch {
+            if (!repository.moveMoney(currentKid, fromGoalId, toGoalId, amountCents)) {
+                emitMessage(R.string.message_move_failed)
+            }
+        }
+    }
+
+    /** Records buying [goal] as an expense, paid for with what was saved for it. */
+    fun buyGoal(goal: Goal, title: String, amountCents: Long, category: String, timestamp: Long) {
+        val trimmedCategory = category.trim()
+        if (title.isBlank() || amountCents <= 0L || trimmedCategory.isBlank()) return
+        showCategory(trimmedCategory)
+        viewModelScope.launch {
+            val expense = Transaction(
+                kidName = goal.kidName,
+                title = title.trim(),
+                amountCents = amountCents,
+                type = TransactionType.DEBIT,
+                category = trimmedCategory,
+                timestamp = timestamp
+            )
+            if (repository.buyGoal(goal, expense) != null) {
+                emitMessage(R.string.message_goal_bought, goal.name)
+            }
         }
     }
 

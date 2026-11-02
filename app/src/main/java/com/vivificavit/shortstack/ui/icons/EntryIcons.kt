@@ -70,6 +70,7 @@ import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.vivificavit.shortstack.R
+import com.vivificavit.shortstack.data.model.Goal
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.util.IconMatcher
@@ -201,6 +202,15 @@ object EntryIcons {
 
     /** The icon a category picks automatically from its name, if any word matches. */
     fun automaticForCategory(category: String): EntryIcon? = forKey(IconMatcher.match(category))
+
+    /** A piggy bank, for goals whose name matches no icon. */
+    val goalFallback: ImageVector = Icons.Filled.Savings
+
+    /** The icon for a goal: the one the user chose, then a match for its name, then a piggy bank. */
+    fun forGoal(name: String, iconKey: String?): ImageVector =
+        (forKey(iconKey) ?: forKey(IconMatcher.match(name)))?.vector ?: goalFallback
+
+    fun forGoal(goal: Goal): ImageVector = forGoal(goal.name, goal.icon)
 
     /**
      * Icons to offer first when picking [category]'s icon: the one its name matches, then

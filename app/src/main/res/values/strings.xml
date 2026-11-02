@@ -15,7 +15,9 @@
     <string name="tab_ledger">Ledger</string>
     <string name="tab_income">Income</string>
     <string name="tab_expenses">Expenses</string>
+    <string name="tab_goals">Goals</string>
     <string name="fab_entry">Entry</string>
+    <string name="fab_goal">Goal</string>
 
     <!-- Common actions -->
     <string name="action_add">Add</string>
@@ -24,6 +26,7 @@
     <string name="action_delete">Delete</string>
     <string name="action_done">Done</string>
     <string name="action_remove">Remove</string>
+    <string name="action_save">Save</string>
     <string name="action_undo">Undo</string>
     <string name="cd_delete_item">Delete %1$s</string>
     <string name="cd_delete_entry">Delete entry</string>
@@ -49,7 +52,7 @@
 
     <!-- Restore backup confirmation -->
     <string name="restore_confirm_title">Replace all data?</string>
-    <string name="restore_confirm_body">Restoring a backup replaces every kid, entry and category on this phone with the ones in the file. This can\'t be undone, so export a backup first if you might want your current data.</string>
+    <string name="restore_confirm_body">Restoring a backup replaces every kid, entry, goal and category on this phone with the ones in the file. This can\'t be undone, so export a backup first if you might want your current data.</string>
     <string name="restore_confirm_action">Choose backup</string>
 
     <!-- Categories -->
@@ -65,8 +68,75 @@
 
     <!-- Ledger tab -->
     <string name="balance_title">%1$s\'s balance</string>
+    <string name="pocket_money_title">%1$s\'s pocket money</string>
+    <string name="total_savings_label">Total savings</string>
+    <plurals name="saved_for_goals">
+        <item quantity="one">Saved for %d goal</item>
+        <item quantity="other">Saved for %d goals</item>
+    </plurals>
+    <string name="cd_show_goals">Show goals</string>
+    <string name="goal_tag_saved">%1$s saved for %2$s</string>
+    <string name="goal_tag_from">%1$s from %2$s savings</string>
     <string name="empty_ledger_title">No entries yet</string>
     <string name="empty_ledger_hint">Tap \'+ Entry\' below to add an entry.</string>
+
+    <!-- Goals tab -->
+    <string name="goals_pocket_money">Pocket money free to save</string>
+    <string name="goals_pocket_money_short">Pocket money</string>
+    <string name="goals_empty_title">Start your first goal</string>
+    <string name="goals_empty_title_next">What\'s next to save for?</string>
+    <string name="goals_empty_hint">Pick something to save up for, like a game or a bike, and set money aside for it.</string>
+    <string name="goals_add">Add goal</string>
+    <string name="goals_done_heading">Done (%1$d)</string>
+    <string name="cd_show_done_goals">Show goals you\'ve bought</string>
+    <string name="cd_hide_done_goals">Hide goals you\'ve bought</string>
+    <string name="cd_open_goal">Open goal</string>
+    <string name="cd_goal_options">Goal options</string>
+    <string name="goal_progress_amount">%1$s of %2$s</string>
+    <string name="goal_progress_saved">%1$s of %2$s saved</string>
+    <string name="goal_reached">Goal reached!</string>
+    <string name="goal_save_more">Save %1$s more to reach your goal!</string>
+    <string name="goal_mark_bought">Mark as bought</string>
+    <string name="goal_add_short">Add</string>
+    <string name="goal_bought_for">Bought for %1$s on %2$s</string>
+    <string name="goal_bought_on">Bought on %1$s</string>
+    <string name="goal_action_add_money">Add money</string>
+    <string name="goal_action_move_money">Move money</string>
+    <string name="goal_action_buy">Mark as bought</string>
+    <string name="goal_action_edit">Edit goal</string>
+    <string name="goal_action_delete">Delete goal</string>
+
+    <!-- Goal dialogs -->
+    <string name="goal_new_title">New goal</string>
+    <string name="goal_edit_title">Edit goal</string>
+    <string name="goal_name_label">What are you saving for?</string>
+    <string name="goal_name_hint">New video game, Bike…</string>
+    <string name="goal_target_label">It costs ($)</string>
+    <string name="goal_choose_icon">Choose icon</string>
+    <string name="goal_name_error">Please enter what you\'re saving for.</string>
+    <string name="goal_icon_title">Goal icon</string>
+    <string name="goal_icon_hint">Automatic picks an icon from the goal\'s name.</string>
+    <string name="move_title">Move money</string>
+    <string name="move_from">From</string>
+    <string name="move_to">To</string>
+    <string name="move_place">%1$s · %2$s</string>
+    <string name="move_up_to">Up to %1$s</string>
+    <string name="move_all">All</string>
+    <string name="move_confirm">Move</string>
+    <string name="move_same_error">Pick two different places.</string>
+    <string name="goal_history_title">History</string>
+    <string name="goal_history_empty">Nothing saved yet.</string>
+    <string name="goal_history_added">Added from pocket money</string>
+    <string name="goal_history_taken_out">Moved back to pocket money</string>
+    <string name="goal_history_moved_in">Moved from %1$s</string>
+    <string name="goal_history_moved_out">Moved to %1$s</string>
+    <string name="goal_history_split">Saved from \"%1$s\"</string>
+    <string name="goal_history_split_unknown">Saved from income</string>
+    <string name="goal_history_bought">Spent on \"%1$s\"</string>
+    <string name="goal_history_bought_unknown">Spent when bought</string>
+    <string name="goal_history_covered">Used to pay for \"%1$s\"</string>
+    <string name="goal_history_covered_unknown">Used to cover spending</string>
+    <string name="goal_history_adjusted">Corrected after an entry changed</string>
 
     <!-- Income and expenses tabs -->
     <string name="breakdown_range_title">Summary date range</string>
@@ -106,6 +176,18 @@
     <string name="entry_amount_error">Please enter an amount between %1$s and %2$s.</string>
     <string name="entry_category_error">Please choose a category.</string>
     <string name="entry_note_error">Please enter a description.</string>
+    <string name="entry_split_title">Save some for a goal</string>
+    <string name="entry_split_amount_label">Amount to save ($)</string>
+    <string name="entry_split_percent">%1$d%%</string>
+    <string name="entry_split_summary">%1$s to pocket money · %2$s to %3$s</string>
+    <string name="entry_split_error">Please set aside an amount between %1$s and %2$s.</string>
+    <string name="entry_split_locked">%1$s of this went to %2$s, which has been bought.</string>
+    <string name="entry_cover_warning">This uses %1$s of your goal savings. Take it from:</string>
+    <string name="entry_cover_more">Anything more comes from your other goals.</string>
+    <string name="entry_buy_title">Buy %1$s</string>
+    <string name="entry_buy_uses">Uses %1$s saved for %2$s.</string>
+    <string name="entry_buy_extra">The other %1$s comes from pocket money.</string>
+    <string name="entry_buy_left">%1$s left over goes back to pocket money.</string>
     <string name="entry_save">Save entry</string>
     <string name="entry_delete">Delete entry</string>
 
@@ -116,6 +198,11 @@
     <string name="message_category_removed">Removed unused category \"%1$s\"</string>
     <string name="message_category_in_use">Can\'t delete \"%1$s\" because it\'s used in entries</string>
     <string name="message_entry_deleted">Deleted \"%1$s\"</string>
+    <string name="message_goal_added">Added goal \"%1$s\"</string>
+    <string name="message_goal_deleted">Deleted goal \"%1$s\"</string>
+    <string name="message_goal_reached">You\'ve saved enough for %1$s!</string>
+    <string name="message_goal_bought">Bought %1$s. Nice saving!</string>
+    <string name="message_move_failed">There isn\'t that much to move.</string>
     <string name="message_export_succeeded">Exported %1$s entries to backup</string>
     <string name="message_export_failed">Backup export failed. %1$s</string>
     <string name="message_csv_export_succeeded">Exported %1$s entries to spreadsheet</string>

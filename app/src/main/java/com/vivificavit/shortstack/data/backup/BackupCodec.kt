@@ -1,6 +1,9 @@
 package com.vivificavit.shortstack.data.backup
 
 import com.vivificavit.shortstack.data.model.DefaultCategories
+import com.vivificavit.shortstack.data.model.Goal
+import com.vivificavit.shortstack.data.model.GoalMove
+import com.vivificavit.shortstack.data.model.GoalMoveReason
 import com.vivificavit.shortstack.data.model.KidProfile
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
@@ -9,6 +12,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlin.math.abs
 
 @Serializable
 data class BackupFile(
@@ -17,7 +21,11 @@ data class BackupFile(
     val categories: List<String> = emptyList(),
     val transactions: List<BackupTransaction> = emptyList(),
     /** Category name -> icon key, for categories with an icon the user picked. Optional. */
-    val categoryIcons: Map<String, String> = emptyMap()
+    val categoryIcons: Map<String, String> = emptyMap(),
+    /** Present in format version 3+. */
+    val goals: List<BackupGoal> = emptyList(),
+    /** Present in format version 3+. */
+    val goalMoves: List<BackupGoalMove> = emptyList()
 )
 
 @Serializable
@@ -36,7 +44,30 @@ data class BackupTransaction(
     val amount: Double? = null,
     val type: TransactionType,
     val category: String = DefaultCategories.DEFAULT_CATEGORIES.first(),
-    val timestamp: Long
+    val timestamp: Long,
+    /** The entry's id when it was backed up, so goal moves can point to it. Format version 3+. */
+    val ref: Long? = null
+)
+
+@Serializable
+data class BackupGoal(
+    /** The goal's id when it was backed up, so goal moves can point to it. */
+    val ref: Long,
+    val kidName: String,
+    val name: String,
+    val targetCents: Long,
+    val icon: String? = null,
+    val createdAt: Long = 0L,
+    val completedAt: Long? = null
+)
+
+@Serializable
+data class BackupGoalMove(
+    val goalRef: Long,
+    val amountCents: Long,
+    val reason: GoalMoveReason,
+    val timestamp: Long,
+    val transactionRef: Long? = null
 )
 
 /** Fully validated backup contents, ready to write to the database. */
@@ -45,20 +76,33 @@ data class BackupContents(
     val categories: List<String>,
     val transactions: List<Transaction>,
     /** Lower-cased category name -> icon key. */
-    val categoryIcons: Map<String, String> = emptyMap()
+    val categoryIcons: Map<String, String> = emptyMap(),
+    /** Each transaction's ref (or null), in the same order as [transactions]. */
+    val transactionRefs: List<Long?> = emptyList(),
+    /** Goals by their ref; their ids are left for the database to assign. */
+    val goals: Map<Long, Goal> = emptyMap(),
+    /** Moves whose goal and entry are still refs; see [BackupCodec.decode]. */
+    val goalMoves: List<BackupGoalMove> = emptyList()
 )
 
 /**
  * Format 1 (original): a bare JSON array of transactions with dollar amounts.
  * Format 2: an object with kids, categories and transactions in cents.
+ * Format 3: adds goals and the money moved into and out of them.
  */
 object BackupCodec {
-    const val CURRENT_FORMAT_VERSION = 2
+    const val CURRENT_FORMAT_VERSION = 3
 
     /** Entries dated after this (2100-01-01 UTC) are treated as corrupt. */
     private const val MAX_TIMESTAMP = 4_102_444_800_000L
 
     private const val MAX_ICON_KEY_LENGTH = 40
+
+    /**
+     * Largest single goal move accepted. A purchase or correction can add up many
+     * entries, so this is well above [Money.MAX_ENTRY_CENTS]; it only stops sums overflowing.
+     */
+    private const val MAX_MOVE_CENTS = 1_000_000_000_000L
 
     private val json = Json {
         prettyPrint = true
@@ -70,7 +114,9 @@ object BackupCodec {
         kids: List<KidProfile>,
         categories: List<String>,
         transactions: List<Transaction>,
-        categoryIcons: Map<String, String> = emptyMap()
+        categoryIcons: Map<String, String> = emptyMap(),
+        goals: List<Goal> = emptyList(),
+        goalMoves: List<GoalMove> = emptyList()
     ): String = json.encodeToString(
         BackupFile.serializer(),
         BackupFile(
@@ -83,10 +129,31 @@ object BackupCodec {
                     amountCents = it.amountCents,
                     type = it.type,
                     category = it.category,
-                    timestamp = it.timestamp
+                    timestamp = it.timestamp,
+                    ref = it.id
                 )
             },
-            categoryIcons = categoryIcons
+            categoryIcons = categoryIcons,
+            goals = goals.map {
+                BackupGoal(
+                    ref = it.id,
+                    kidName = it.kidName,
+                    name = it.name,
+                    targetCents = it.targetCents,
+                    icon = it.icon,
+                    createdAt = it.createdAt,
+                    completedAt = it.completedAt
+                )
+            },
+            goalMoves = goalMoves.map {
+                BackupGoalMove(
+                    goalRef = it.goalId,
+                    amountCents = it.amountCents,
+                    reason = it.reason,
+                    timestamp = it.timestamp,
+                    transactionRef = it.transactionId
+                )
+            }
         )
     )
 
@@ -134,9 +201,45 @@ object BackupCodec {
                 timestamp = tx.timestamp
             )
         }
+        val transactionRefs = file.transactions.map { it.ref }
+
+        val goals = file.goals.mapIndexed { index, goal ->
+            val label = "Goal ${index + 1}"
+            require(goal.kidName.isNotBlank()) { "$label has no kid name." }
+            require(goal.name.isNotBlank()) { "$label has no name." }
+            require(goal.targetCents in 1..Money.MAX_ENTRY_CENTS) {
+                "$label costs outside ${Money.format(1L)} to ${Money.format(Money.MAX_ENTRY_CENTS)}."
+            }
+            require(goal.createdAt in 0..MAX_TIMESTAMP && (goal.completedAt ?: 0L) in 0..MAX_TIMESTAMP) {
+                "$label has an invalid date."
+            }
+            goal.ref to Goal(
+                kidName = goal.kidName.trim(),
+                name = goal.name.trim(),
+                targetCents = goal.targetCents,
+                // Like category icons, a malformed one just falls back to an automatic icon.
+                icon = goal.icon?.takeIf { it.isNotBlank() && it.length <= MAX_ICON_KEY_LENGTH },
+                createdAt = goal.createdAt,
+                completedAt = goal.completedAt
+            )
+        }
+        require(goals.map { it.first }.toSet().size == goals.size) { "The backup has two goals with the same id." }
+        val goalsByRef = goals.toMap()
+
+        val knownRefs = transactionRefs.filterNotNull().toSet()
+        val goalMoves = file.goalMoves.mapIndexed { index, move ->
+            val label = "Goal move ${index + 1}"
+            require(move.goalRef in goalsByRef) { "$label is for a goal that isn't in the backup." }
+            require(move.amountCents != 0L && abs(move.amountCents) <= MAX_MOVE_CENTS) { "$label has an invalid amount." }
+            require(move.timestamp in 0..MAX_TIMESTAMP) { "$label has an invalid date." }
+            // A link to an entry that isn't here only loses the note on that entry.
+            move.copy(transactionRef = move.transactionRef?.takeIf { it in knownRefs })
+        }
+
         require(file.kids.none { it.name.isBlank() }) { "The backup has a kid with no name." }
         val kids = (file.kids.map { KidProfile(name = it.name.trim(), createdAt = it.createdAt) } +
-            transactions.map { KidProfile(name = it.kidName) })
+            transactions.map { KidProfile(name = it.kidName) } +
+            goalsByRef.values.map { KidProfile(name = it.kidName) })
             .distinctBy { it.name }
         val categories = (file.categories.map { it.trim() } + transactions.map { it.category })
             .filter { it.isNotBlank() }
@@ -150,7 +253,10 @@ object BackupCodec {
             kids = kids,
             categories = categories,
             transactions = transactions,
-            categoryIcons = categoryIcons
+            categoryIcons = categoryIcons,
+            transactionRefs = transactionRefs,
+            goals = goalsByRef,
+            goalMoves = goalMoves
         )
     }
 }

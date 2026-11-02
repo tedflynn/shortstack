@@ -21,11 +21,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +54,7 @@ import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.ui.icons.EntryIcons
+import com.vivificavit.shortstack.ui.viewmodel.GoalTag
 import com.vivificavit.shortstack.ui.viewmodel.LedgerState
 import com.vivificavit.shortstack.ui.theme.CategoryTagBackground
 import com.vivificavit.shortstack.ui.theme.CategoryTagText
@@ -65,6 +71,14 @@ import kotlinx.coroutines.launch
 /** Above this system font scale, rows stack the amount under the note. */
 private const val LargeTextScale = 1.3f
 
+/** "Oct 30" this year, "Dec 28, 2025" for older dates, in the device's locale order. */
+internal fun formatShortDate(timestamp: Long): String {
+    val locale = Locale.getDefault()
+    val date = Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+    val skeleton = if (date.year == LocalDate.now().year) "MMMd" else "yMMMd"
+    return date.format(DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, skeleton), locale))
+}
+
 /** Shows nothing until [ledger] has loaded, so an empty ledger never flashes up. */
 @Composable
 fun RunningTallyTabContent(
@@ -73,6 +87,7 @@ fun RunningTallyTabContent(
     categoryIcons: Map<String, String>,
     onEditTransaction: (Transaction) -> Unit,
     onDeleteTransaction: (Transaction) -> Unit,
+    onShowGoals: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (ledger == null) return
@@ -91,7 +106,8 @@ fun RunningTallyTabContent(
         item(key = "header_card") {
             BalanceHeaderCard(
                 kidName = kidName,
-                runningBalanceCents = ledger.balanceCents
+                ledger = ledger,
+                onShowGoals = onShowGoals
             )
         }
 
@@ -109,6 +125,7 @@ fun RunningTallyTabContent(
                     icon = remember(transaction, categoryIcons) {
                         EntryIcons.forEntry(transaction, categoryIcons).vector
                     },
+                    goalTags = ledger.goalTags[transaction.id].orEmpty(),
                     onClick = { onEditTransaction(transaction) },
                     onDelete = { onDeleteTransaction(transaction) }
                 )
@@ -117,14 +134,21 @@ fun RunningTallyTabContent(
     }
 }
 
+/**
+ * With goals, pocket money (what's free to spend) leads and the total comes
+ * second; without any, it's just the balance, as the two would be the same.
+ */
 @Composable
 fun BalanceHeaderCard(
     kidName: String,
-    runningBalanceCents: Long,
+    ledger: LedgerState,
+    onShowGoals: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Outline and text follow the balance's sign; zero counts as not negative.
-    val balanceColor = if (runningBalanceCents < 0L) DebitRed else CreditGreen
+    val hasGoals = ledger.activeGoalCount > 0
+    val headlineCents = if (hasGoals) ledger.pocketCents else ledger.balanceCents
+    // Outline and text follow the headline's sign; zero counts as not negative.
+    val balanceColor = if (headlineCents < 0L) DebitRed else CreditGreen
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -140,17 +164,78 @@ fun BalanceHeaderCard(
                 .padding(20.dp)
         ) {
             Text(
-                text = stringResource(R.string.balance_title, kidName),
+                text = stringResource(
+                    if (hasGoals) R.string.pocket_money_title else R.string.balance_title,
+                    kidName
+                ),
                 style = MaterialTheme.typography.labelLarge,
                 color = balanceColor
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = Money.format(runningBalanceCents),
+                text = Money.format(headlineCents),
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.ExtraBold,
                 color = balanceColor
             )
+            if (hasGoals) {
+                HorizontalDivider(modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(R.string.total_savings_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = Money.format(ledger.balanceCents),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(
+                            onClickLabel = stringResource(R.string.cd_show_goals),
+                            onClick = onShowGoals
+                        )
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Savings,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = pluralStringResource(
+                            R.plurals.saved_for_goals,
+                            ledger.activeGoalCount,
+                            ledger.activeGoalCount
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = Money.format(ledger.savedCents),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -160,6 +245,7 @@ fun BalanceHeaderCard(
 fun SwipeableTransactionItem(
     transaction: Transaction,
     icon: ImageVector,
+    goalTags: List<GoalTag>,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -196,6 +282,7 @@ fun SwipeableTransactionItem(
             TransactionRowCard(
                 transaction = transaction,
                 icon = icon,
+                goalTags = goalTags,
                 onClick = onClick,
                 onDeleteClick = onDelete
             )
@@ -208,17 +295,12 @@ fun SwipeableTransactionItem(
 fun TransactionRowCard(
     transaction: Transaction,
     icon: ImageVector,
+    goalTags: List<GoalTag>,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // "Oct 30" this year, "Dec 28, 2025" for older entries, in the device's locale order.
-    val shortDate = remember(transaction.timestamp) {
-        val locale = Locale.getDefault()
-        val date = Instant.ofEpochMilli(transaction.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
-        val skeleton = if (date.year == LocalDate.now().year) "MMMd" else "yMMMd"
-        date.format(DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, skeleton), locale))
-    }
+    val shortDate = remember(transaction.timestamp) { formatShortDate(transaction.timestamp) }
     // With large system text, the amount moves under the note so the row isn't squeezed.
     val largeText = LocalDensity.current.fontScale > LargeTextScale
 
@@ -307,6 +389,7 @@ fun TransactionRowCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1
                         )
+                        goalTags.forEach { tag -> GoalTagLabel(tag) }
                     }
                     if (largeText) {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -326,6 +409,30 @@ fun TransactionRowCard(
                 }
             }
         }
+    }
+}
+
+/** "$2.00 saved for New video game", or where goal money paid for an entry. */
+@Composable
+private fun GoalTagLabel(tag: GoalTag) {
+    val amount = Money.format(tag.amountCents)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = Icons.Default.Savings,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = if (tag.kind == GoalTag.Kind.SAVED) {
+                stringResource(R.string.goal_tag_saved, amount, tag.goalName)
+            } else {
+                stringResource(R.string.goal_tag_from, amount, tag.goalName)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

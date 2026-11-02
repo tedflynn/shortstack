@@ -1,6 +1,10 @@
 package com.vivificavit.shortstack.data
 
 import com.vivificavit.shortstack.data.backup.BackupCodec
+import com.vivificavit.shortstack.data.backup.BackupGoalMove
+import com.vivificavit.shortstack.data.model.Goal
+import com.vivificavit.shortstack.data.model.GoalMove
+import com.vivificavit.shortstack.data.model.GoalMoveReason
 import com.vivificavit.shortstack.data.model.KidProfile
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
@@ -89,6 +93,66 @@ class BackupCodecTest {
     fun dropsMalformedIconsWithoutFailingTheRestore() {
         val raw = """{"categories":["Job"],"categoryIcons":{"Job":"work"," ":"star","Snacks":"","Toy":"${"x".repeat(41)}"}}"""
         assertEquals(mapOf("job" to "work"), BackupCodec.decode(raw).categoryIcons)
+    }
+
+    @Test
+    fun roundTripsGoalsAndTheirMoves() {
+        val tx = Transaction(id = 7, kidName = "Sam", title = "Allowance", amountCents = 1_000, type = TransactionType.CREDIT)
+        val goal = Goal(id = 3, kidName = "Sam", name = "Game", targetCents = 7_000, icon = "game", createdAt = 2)
+        val moves = listOf(
+            GoalMove(id = 1, kidName = "Sam", goalId = 3, amountCents = 200, reason = GoalMoveReason.SPLIT, timestamp = 5, transactionId = 7),
+            GoalMove(id = 2, kidName = "Sam", goalId = 3, amountCents = -50, reason = GoalMoveReason.MANUAL, timestamp = 6)
+        )
+        val decoded = BackupCodec.decode(
+            BackupCodec.encode(
+                kids = listOf(KidProfile(name = "Sam")),
+                categories = emptyList(),
+                transactions = listOf(tx),
+                goals = listOf(goal),
+                goalMoves = moves
+            )
+        )
+
+        assertEquals(listOf<Long?>(7), decoded.transactionRefs)
+        assertEquals(mapOf(3L to goal.copy(id = 0)), decoded.goals)
+        assertEquals(
+            listOf(
+                BackupGoalMove(goalRef = 3, amountCents = 200, reason = GoalMoveReason.SPLIT, timestamp = 5, transactionRef = 7),
+                BackupGoalMove(goalRef = 3, amountCents = -50, reason = GoalMoveReason.MANUAL, timestamp = 6)
+            ),
+            decoded.goalMoves
+        )
+    }
+
+    @Test
+    fun formatTwoBackupsRestoreWithNoGoals() {
+        val decoded = BackupCodec.decode(entry())
+        assertEquals(emptyMap<Long, Goal>(), decoded.goals)
+        assertEquals(emptyList<BackupGoalMove>(), decoded.goalMoves)
+        assertEquals(listOf<Long?>(null), decoded.transactionRefs)
+    }
+
+    @Test
+    fun rejectsBrokenGoals() {
+        val goal = """{"ref":1,"kidName":"Sam","name":"Game","targetCents":7000}"""
+        val move = """{"goalRef":1,"amountCents":200,"reason":"MANUAL","timestamp":1}"""
+        val bad = listOf(
+            """{"goals":[{"ref":1,"kidName":"Sam","name":" ","targetCents":7000}]}""",
+            """{"goals":[{"ref":1,"kidName":"Sam","name":"Game","targetCents":0}]}""",
+            """{"goals":[{"ref":1,"kidName":" ","name":"Game","targetCents":7000}]}""",
+            """{"goals":[$goal,$goal]}""",
+            """{"goals":[$goal],"goalMoves":[{"goalRef":2,"amountCents":200,"reason":"MANUAL","timestamp":1}]}""",
+            """{"goals":[$goal],"goalMoves":[{"goalRef":1,"amountCents":0,"reason":"MANUAL","timestamp":1}]}""",
+            """{"goals":[$goal],"goalMoves":[{"goalRef":1,"amountCents":200,"reason":"MANUAL","timestamp":-1}]}"""
+        )
+        bad.forEach { raw ->
+            assertTrue("expected failure for $raw", runCatching { BackupCodec.decode(raw) }.isFailure)
+        }
+        // A link to an entry that isn't in the file is dropped, not fatal.
+        val linked = move.replace("}", ""","transactionRef":99}""")
+        val decoded = BackupCodec.decode("""{"goals":[$goal],"goalMoves":[$linked]}""")
+        assertEquals(null, decoded.goalMoves.single().transactionRef)
+        assertEquals(listOf("Sam"), decoded.kids.map { it.name })
     }
 
     /** A one-entry backup that's valid unless a field is overridden. */
