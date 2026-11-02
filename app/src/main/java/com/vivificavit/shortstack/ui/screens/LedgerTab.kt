@@ -54,7 +54,6 @@ import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.ui.icons.EntryIcons
-import com.vivificavit.shortstack.ui.viewmodel.GoalTag
 import com.vivificavit.shortstack.ui.viewmodel.LedgerState
 import com.vivificavit.shortstack.ui.theme.CategoryTagBackground
 import com.vivificavit.shortstack.ui.theme.CategoryTagText
@@ -125,7 +124,6 @@ fun RunningTallyTabContent(
                     icon = remember(transaction, categoryIcons) {
                         EntryIcons.forEntry(transaction, categoryIcons).vector
                     },
-                    goalTags = ledger.goalTags[transaction.id].orEmpty(),
                     onClick = { onEditTransaction(transaction) },
                     onDelete = { onDeleteTransaction(transaction) }
                 )
@@ -245,7 +243,6 @@ fun BalanceHeaderCard(
 fun SwipeableTransactionItem(
     transaction: Transaction,
     icon: ImageVector,
-    goalTags: List<GoalTag>,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -282,7 +279,6 @@ fun SwipeableTransactionItem(
             TransactionRowCard(
                 transaction = transaction,
                 icon = icon,
-                goalTags = goalTags,
                 onClick = onClick,
                 onDeleteClick = onDelete
             )
@@ -295,7 +291,6 @@ fun SwipeableTransactionItem(
 fun TransactionRowCard(
     transaction: Transaction,
     icon: ImageVector,
-    goalTags: List<GoalTag>,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -389,7 +384,6 @@ fun TransactionRowCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1
                         )
-                        goalTags.forEach { tag -> GoalTagLabel(tag) }
                     }
                     if (largeText) {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -409,30 +403,6 @@ fun TransactionRowCard(
                 }
             }
         }
-    }
-}
-
-/** "$2.00 saved for New video game", or where goal money paid for an entry. */
-@Composable
-private fun GoalTagLabel(tag: GoalTag) {
-    val amount = Money.format(tag.amountCents)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = Icons.Default.Savings,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(14.dp)
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = if (tag.kind == GoalTag.Kind.SAVED) {
-                stringResource(R.string.goal_tag_saved, amount, tag.goalName)
-            } else {
-                stringResource(R.string.goal_tag_from, amount, tag.goalName)
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 

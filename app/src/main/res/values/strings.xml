@@ -75,8 +75,6 @@
         <item quantity="other">Saved for %d goals</item>
     </plurals>
     <string name="cd_show_goals">Show goals</string>
-    <string name="goal_tag_saved">%1$s saved for %2$s</string>
-    <string name="goal_tag_from">%1$s from %2$s savings</string>
     <string name="empty_ledger_title">No entries yet</string>
     <string name="empty_ledger_hint">Tap \'+ Entry\' below to add an entry.</string>
 

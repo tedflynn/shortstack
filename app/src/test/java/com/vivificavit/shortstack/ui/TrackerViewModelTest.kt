@@ -11,7 +11,6 @@ import com.vivificavit.shortstack.data.model.GoalSplit
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.repository.TransactionRepository
-import com.vivificavit.shortstack.ui.viewmodel.GoalTag
 import com.vivificavit.shortstack.ui.viewmodel.TrackerViewModel
 import com.vivificavit.shortstack.ui.viewmodel.UiMessage
 import kotlinx.coroutines.CoroutineStart
@@ -294,7 +293,7 @@ class TrackerViewModelTest {
     }
 
     @Test
-    fun incomeSplitIsTaggedAndUndoBringsItBack() = runBlocking {
+    fun incomeSplitIsSetAsideAndUndoBringsItBack() = runBlocking {
         val gameId = goal("Game")
         val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
         vm.goals.awaitValue { it != null }
@@ -302,7 +301,7 @@ class TrackerViewModelTest {
         val ledger = vm.ledger.awaitValue { it?.savedCents == 200L }!!
         assertEquals(800L, ledger.pocketCents)
         val entry = ledger.transactions.single()
-        assertEquals(listOf(GoalTag(GoalTag.Kind.SAVED, "Game", 200)), ledger.goalTags[entry.id])
+        assertEquals(listOf(200L), ledger.movesByEntry[entry.id]?.map { it.amountCents })
 
         val message = async(start = CoroutineStart.UNDISPATCHED) {
             vm.uiMessages.awaitValue { it.resId == R.string.message_entry_deleted }

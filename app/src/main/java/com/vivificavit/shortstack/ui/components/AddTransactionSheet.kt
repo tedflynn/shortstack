@@ -76,7 +76,6 @@ import com.vivificavit.shortstack.ui.theme.DebitRed
 import com.vivificavit.shortstack.ui.theme.OnCreditContainer
 import com.vivificavit.shortstack.ui.theme.OnDebitContainer
 import com.vivificavit.shortstack.ui.viewmodel.GoalProgress
-import com.vivificavit.shortstack.ui.viewmodel.GoalTag
 import com.vivificavit.shortstack.ui.viewmodel.GoalsState
 import com.vivificavit.shortstack.ui.viewmodel.LedgerState
 import com.vivificavit.shortstack.util.DateRanges
@@ -110,7 +109,7 @@ data class EntryMoney(
     /** This entry's split, when it's income that set some aside for a goal still being saved for. */
     val existingSplit: GoalSplit? = null,
     /** This entry's split to a goal that's since been bought; it can't be changed. */
-    val lockedSplit: GoalTag? = null
+    val lockedSplit: LockedSplit? = null
 ) {
     val savedCents: Long get() = goals.sumOf { it.savedCents }
     val pocketCents: Long get() = balanceCents - savedCents
@@ -139,12 +138,15 @@ data class EntryMoney(
                     ?.let { GoalSplit(it.goalId, it.amountCents) },
                 lockedSplit = lockedMove?.let { move ->
                     goals?.done?.firstOrNull { it.goal.id == move.goalId }
-                        ?.let { GoalTag(GoalTag.Kind.SAVED, it.goal.name, move.amountCents) }
+                        ?.let { LockedSplit(it.goal.name, move.amountCents) }
                 }
             )
         }
     }
 }
+
+/** What an income entry set aside for a goal that's since been bought. */
+data class LockedSplit(val goalName: String, val amountCents: Long)
 
 /** Quick picks for how much of an income entry to set aside. */
 private val SplitPercents = listOf(10, 20, 50, 100)

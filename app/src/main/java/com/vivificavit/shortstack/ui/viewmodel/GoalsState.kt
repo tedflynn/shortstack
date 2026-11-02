@@ -6,7 +6,6 @@ import com.vivificavit.shortstack.data.model.GoalMoveReason
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.util.GoalMath
-import kotlin.math.abs
 
 /** What the Goals tab shows for one kid. */
 data class GoalsState(
@@ -57,20 +56,6 @@ internal fun buildMoneyStates(
     val entriesById = transactions.associateBy { it.id }
     val (done, active) = goals.partition { it.completedAt != null }
 
-    val goalTags = moves
-        .mapNotNull { move ->
-            val entryId = move.transactionId ?: return@mapNotNull null
-            val goal = goalsById[move.goalId] ?: return@mapNotNull null
-            val kind = when (move.reason) {
-                GoalMoveReason.SPLIT -> GoalTag.Kind.SAVED
-                GoalMoveReason.PURCHASE -> GoalTag.Kind.BOUGHT
-                GoalMoveReason.COVER -> GoalTag.Kind.COVERED
-                else -> return@mapNotNull null
-            }
-            entryId to GoalTag(kind, goal.name, abs(move.amountCents))
-        }
-        .groupBy({ it.first }, { it.second })
-
     val paidByGoal = moves
         .filter { it.reason == GoalMoveReason.PURCHASE }
         .mapNotNull { move -> entriesById[move.transactionId]?.let { move.goalId to it.amountCents } }
@@ -108,7 +93,6 @@ internal fun buildMoneyStates(
         pocketCents = balance - savedTotal,
         savedCents = savedTotal,
         activeGoalCount = active.size,
-        goalTags = goalTags,
         movesByEntry = moves.filter { it.transactionId != null }.groupBy { it.transactionId!! }
     )
     val goalsState = GoalsState(
