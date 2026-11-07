@@ -144,16 +144,9 @@
     <string name="goal_history_adjusted">Corrected after an entry changed</string>
 
     <!-- Trends tab -->
-    <string name="breakdown_range_title">Summary date range</string>
-    <string name="breakdown_preset_this_month">This month</string>
-    <string name="breakdown_preset_this_year">This year</string>
-    <string name="breakdown_preset_all_time">All time</string>
+    <string name="breakdown_range_title">Spending summary</string>
     <string name="breakdown_start_date">Start date</string>
     <string name="breakdown_end_date">End date</string>
-    <string name="breakdown_range_beginning">Beginning</string>
-    <string name="breakdown_range_today">Today</string>
-    <string name="breakdown_range">%1$s – %2$s</string>
-    <string name="breakdown_all_recorded">Everything recorded</string>
     <string name="trends_income">Income</string>
     <string name="trends_expenses">Expenses</string>
     <string name="cd_stacked_bar">%1$s: %2$s in total</string>
@@ -313,6 +306,7 @@
     <string name="recurring_goal">%1$s to %2$s each time</string>
     <string name="action_stop">Stop</string>
     <string name="action_close">Close</string>
+    <string name="action_clear">Clear</string>
     <string name="cd_repeats">Repeats</string>
     <string name="cd_edit_recurring">Edit %1$s</string>
 </resources>

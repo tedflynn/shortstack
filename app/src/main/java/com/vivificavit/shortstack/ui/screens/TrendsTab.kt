@@ -2,8 +2,6 @@ package com.vivificavit.shortstack.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,7 +19,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -47,18 +44,11 @@ import com.vivificavit.shortstack.ui.components.StackedBar
 import com.vivificavit.shortstack.ui.components.StackedBars
 import com.vivificavit.shortstack.ui.components.categoryColor
 import com.vivificavit.shortstack.util.DateRanges
-import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-private val PresetLabels = mapOf(
-    DateRanges.Preset.THIS_MONTH to R.string.breakdown_preset_this_month,
-    DateRanges.Preset.THIS_YEAR to R.string.breakdown_preset_this_year,
-    DateRanges.Preset.ALL_TIME to R.string.breakdown_preset_all_time
-)
-
 /** Income and expenses side by side for a date range, each split by category. */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrendsTabContent(
     incomeSums: List<CategorySum>,
@@ -84,7 +74,6 @@ fun TrendsTabContent(
             StackedBar(expensesLabel, spendingSums.filter(isShown))
         )
     }
-    val today = remember { LocalDate.now() }
 
     LazyColumn(
         modifier = modifier,
@@ -115,20 +104,6 @@ fun TrendsTabContent(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-                    ) {
-                        DateRanges.Preset.entries.forEach { preset ->
-                            val range = DateRanges.presetRange(preset, today)
-                            FilterChip(
-                                selected = range == (startDateMillis to endDateMillis),
-                                onClick = { onDateRangeSelected(range.first, range.second) },
-                                label = { Text(stringResource(PresetLabels.getValue(preset))) }
-                            )
-                        }
-                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -185,12 +160,6 @@ fun TrendsTabContent(
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = dateRangeSubtitle(startDateMillis, endDateMillis),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
                     StackedBars(bars = bars, colorFor = colorFor)
                     Spacer(modifier = Modifier.height(20.dp))
                     if (incomeSums.isEmpty() && spendingSums.isEmpty()) {
@@ -237,8 +206,19 @@ fun TrendsTabContent(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { pickingStartDate = false }) {
-                    Text(stringResource(R.string.action_cancel))
+                Row {
+                    // With no quick ranges, this is how a range goes back to everything.
+                    TextButton(
+                        onClick = {
+                            onDateRangeSelected(null, endDateMillis)
+                            pickingStartDate = false
+                        }
+                    ) {
+                        Text(stringResource(R.string.action_clear))
+                    }
+                    TextButton(onClick = { pickingStartDate = false }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
                 }
             }
         ) {
@@ -261,8 +241,18 @@ fun TrendsTabContent(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { pickingEndDate = false }) {
-                    Text(stringResource(R.string.action_cancel))
+                Row {
+                    TextButton(
+                        onClick = {
+                            onDateRangeSelected(startDateMillis, null)
+                            pickingEndDate = false
+                        }
+                    ) {
+                        Text(stringResource(R.string.action_clear))
+                    }
+                    TextButton(onClick = { pickingEndDate = false }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
                 }
             }
         ) {
@@ -276,16 +266,3 @@ private fun formatPickerDate(pickerUtcMillis: Long): String =
     DateRanges.pickerMillisToLocalDate(pickerUtcMillis).format(
         DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
     )
-
-@Composable
-private fun dateRangeSubtitle(
-    startDateMillis: Long?,
-    endDateMillis: Long?
-): String {
-    if (startDateMillis == null && endDateMillis == null) {
-        return stringResource(R.string.breakdown_all_recorded)
-    }
-    val startText = startDateMillis?.let(::formatPickerDate) ?: stringResource(R.string.breakdown_range_beginning)
-    val endText = endDateMillis?.let(::formatPickerDate) ?: stringResource(R.string.breakdown_range_today)
-    return stringResource(R.string.breakdown_range, startText, endText)
-}
