@@ -17,6 +17,7 @@
     <string name="tab_goals">Goals</string>
     <string name="tab_trends">Trends</string>
     <string name="fab_entry">Entry</string>
+    <string name="fab_dates">Select start/end date</string>
     <string name="fab_goal">Goal</string>
 
     <!-- Common actions -->
@@ -144,9 +145,14 @@
     <string name="goal_history_adjusted">Corrected after an entry changed</string>
 
     <!-- Trends tab -->
-    <string name="breakdown_range_title">Spending summary</string>
-    <string name="breakdown_start_date">Start date</string>
-    <string name="breakdown_end_date">End date</string>
+    <string name="date_range_title">Select dates</string>
+    <string name="quick_last_week">Last week</string>
+    <string name="quick_last_month">Last month</string>
+    <string name="quick_last_year">Last year</string>
+    <string name="quick_all_time">All time</string>
+    <string name="chart_total_balance">Total balance</string>
+    <string name="chart_saved_for_goals">Saved for goals</string>
+    <string name="cd_balance_chart">Total balance went from %1$s to %2$s, and saved for goals from %3$s to %4$s, between %5$s and %6$s.</string>
     <string name="trends_income">Income</string>
     <string name="trends_expenses">Expenses</string>
     <string name="cd_stacked_bar">%1$s: %2$s in total</string>

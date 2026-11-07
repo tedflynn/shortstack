@@ -28,6 +28,25 @@ object DateRanges {
     }
 
     /** Quick choices for the chart date range. */
+    /** Quick picks for the Trends date range, each ending today. */
+    enum class QuickRange { LAST_WEEK, LAST_MONTH, LAST_YEAR, ALL_TIME }
+
+    /**
+     * The picker start/end values for [range], counting back from [today] and
+     * including it: the last 7 days, the last 30 days (whatever the month), or
+     * from the day after this date a year ago, which is 366 days across a 29 February.
+     * All time is open at both ends.
+     */
+    fun quickRange(range: QuickRange, today: LocalDate): Pair<Long?, Long?> {
+        val start = when (range) {
+            QuickRange.LAST_WEEK -> today.minusDays(6)
+            QuickRange.LAST_MONTH -> today.minusDays(29)
+            QuickRange.LAST_YEAR -> today.minusYears(1).plusDays(1)
+            QuickRange.ALL_TIME -> return null to null
+        }
+        return localDateToPickerMillis(start) to localDateToPickerMillis(today)
+    }
+
     /**
      * Turns the picker's start/end selections into an inclusive range of
      * epoch millis covering whole local days. Missing ends are open-ended,
