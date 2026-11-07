@@ -1,9 +1,8 @@
 package com.vivificavit.shortstack.ui
 
 import com.vivificavit.shortstack.data.local.CategorySum
-import com.vivificavit.shortstack.ui.components.LegendEntry
 import com.vivificavit.shortstack.ui.components.categoryColor
-import com.vivificavit.shortstack.ui.components.legendEntries
+import com.vivificavit.shortstack.ui.components.legendCategories
 import com.vivificavit.shortstack.ui.theme.CategoryPalette
 import com.vivificavit.shortstack.ui.theme.OtherCategoryColor
 import org.junit.Assert.assertEquals
@@ -23,13 +22,6 @@ class SpendingChartsTest {
     fun legendListsEachCategoryOnceWithIncomeFirst() {
         val income = listOf(CategorySum("Gift", 5_000), CategorySum("Allowance", 2_000))
         val spending = listOf(CategorySum("Toy", 2_500), CategorySum("gift", 800))
-        assertEquals(
-            listOf(
-                LegendEntry("Gift", incomeCents = 5_000, expenseCents = 800),
-                LegendEntry("Allowance", incomeCents = 2_000, expenseCents = 0),
-                LegendEntry("Toy", incomeCents = 0, expenseCents = 2_500)
-            ),
-            legendEntries(income, spending)
-        )
+        assertEquals(listOf("Gift", "Allowance", "Toy"), legendCategories(income, spending))
     }
 }

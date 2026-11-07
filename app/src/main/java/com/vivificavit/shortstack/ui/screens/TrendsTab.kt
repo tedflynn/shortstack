@@ -118,7 +118,7 @@ fun TrendsTabContent(
 
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
                     ) {
                         DateRanges.Preset.entries.forEach { preset ->
                             val range = DateRanges.presetRange(preset, today)
