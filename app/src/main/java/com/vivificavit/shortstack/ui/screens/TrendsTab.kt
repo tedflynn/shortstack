@@ -39,10 +39,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.data.local.CategorySum
+import com.vivificavit.shortstack.ui.components.BalanceChart
 import com.vivificavit.shortstack.ui.components.CategoryLegend
 import com.vivificavit.shortstack.ui.components.StackedBar
 import com.vivificavit.shortstack.ui.components.StackedBars
 import com.vivificavit.shortstack.ui.components.categoryColor
+import com.vivificavit.shortstack.util.BalancePoint
 import com.vivificavit.shortstack.util.DateRanges
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -51,6 +53,7 @@ import java.time.format.FormatStyle
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrendsTabContent(
+    balanceHistory: List<BalancePoint>,
     incomeSums: List<CategorySum>,
     spendingSums: List<CategorySum>,
     hiddenCategories: Set<String>,
@@ -142,6 +145,22 @@ fun TrendsTabContent(
                         }
                     }
                 }
+            }
+        }
+
+        item(key = "balance_chart_card") {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                BalanceChart(
+                    points = balanceHistory,
+                    modifier = Modifier.padding(20.dp)
+                )
             }
         }
 

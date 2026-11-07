@@ -110,6 +110,7 @@ fun TrackerMainScreen(
     val goals by viewModel.goals.collectAsStateWithLifecycle()
     val incomeSums by viewModel.incomeSums.collectAsStateWithLifecycle()
     val spendingSums by viewModel.spendingSums.collectAsStateWithLifecycle()
+    val balanceHistory by viewModel.balanceHistory.collectAsStateWithLifecycle()
     val hiddenCategories by viewModel.hiddenCategories.collectAsStateWithLifecycle()
     val categoryIcons by viewModel.categoryIcons.collectAsStateWithLifecycle()
     val notesByCategory by viewModel.notesByCategory.collectAsStateWithLifecycle()
@@ -472,6 +473,7 @@ fun TrackerMainScreen(
 
             TrackerTab.TRENDS -> {
                 TrendsTabContent(
+                    balanceHistory = balanceHistory,
                     incomeSums = incomeSums,
                     spendingSums = spendingSums,
                     hiddenCategories = hiddenCategories,

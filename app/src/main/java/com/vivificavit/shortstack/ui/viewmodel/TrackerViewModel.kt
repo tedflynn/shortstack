@@ -14,8 +14,12 @@ import com.vivificavit.shortstack.data.model.GoalSplit
 import com.vivificavit.shortstack.data.model.RecurringEntry
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
+import com.vivificavit.shortstack.repository.KidMoneySnapshot
 import com.vivificavit.shortstack.repository.TransactionRepository
+import com.vivificavit.shortstack.util.BalanceHistory
+import com.vivificavit.shortstack.util.BalancePoint
 import com.vivificavit.shortstack.util.DateRanges
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,12 +31,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.io.OutputStream
+import java.time.LocalDate
 
 class TrackerViewModel(
     private val repository: TransactionRepository,
@@ -183,7 +189,12 @@ class TrackerViewModel(
         }
     }
 
-    private class KidMoney(val kidName: String, val ledger: LedgerState, val goals: GoalsState)
+    private class KidMoney(
+        val kidName: String,
+        val ledger: LedgerState,
+        val goals: GoalsState,
+        val snapshot: KidMoneySnapshot
+    )
 
     /** The selected kid's entries, goals and moves, worked out together so the two tabs always agree. */
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -194,7 +205,7 @@ class TrackerViewModel(
             } else {
                 repository.getMoneyForKid(kidName).map { money ->
                     val (ledger, goalsState) = buildMoneyStates(money.transactions, money.goals, money.moves)
-                    KidMoney(kidName, ledger, goalsState)
+                    KidMoney(kidName, ledger, goalsState, money)
                 }
             }
         }
@@ -211,6 +222,27 @@ class TrackerViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = null
+        )
+
+    /** The selected kid's balance and goal savings, day by day over the Trends date range. */
+    val balanceHistory: StateFlow<List<BalancePoint>> = combine(kidMoney, _startDateMillis, _endDateMillis) { money, start, end ->
+        if (money == null) {
+            emptyList()
+        } else {
+            BalanceHistory.build(
+                transactions = money.snapshot.transactions,
+                moves = money.snapshot.moves,
+                startDate = start?.let(DateRanges::pickerMillisToLocalDate),
+                endDate = end?.let(DateRanges::pickerMillisToLocalDate),
+                today = LocalDate.now()
+            )
+        }
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
         )
 
     /** The selected kid's repeating entries, oldest first. */
