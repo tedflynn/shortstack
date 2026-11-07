@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
@@ -134,6 +135,7 @@ fun TrackerMainScreen(
     var showEditKidsDialog by rememberSaveable { mutableStateOf(false) }
     var showManageCategoriesDialog by rememberSaveable { mutableStateOf(false) }
     var showRecurringDialog by rememberSaveable { mutableStateOf(false) }
+    var showDateRangeDialog by rememberSaveable { mutableStateOf(false) }
     // The repeating entry open for editing in the entry sheet.
     var editingRecurringId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showRestoreConfirm by rememberSaveable { mutableStateOf(false) }
@@ -394,17 +396,21 @@ fun TrackerMainScreen(
         floatingActionButtonPosition = FabPosition.End,
         floatingActionButton = {
             if (selectedKid != null) {
-                // On the Goals tab the button adds a goal; everywhere else, an entry.
-                val onGoalsTab = selectedTabIndex == TrackerTab.GOALS.ordinal
+                // The button adds a goal on Goals, picks the date range on Trends, and adds an entry on Ledger.
+                val tab = TrackerTab.entries[selectedTabIndex]
                 ExtendedFloatingActionButton(
                     onClick = {
-                        if (onGoalsTab) {
-                            editingGoalId = null
-                            showGoalDialog = true
-                        } else {
-                            editingEntryId = null
-                            buyingGoalId = null
-                            showEntrySheet = true
+                        when (tab) {
+                            TrackerTab.GOALS -> {
+                                editingGoalId = null
+                                showGoalDialog = true
+                            }
+                            TrackerTab.TRENDS -> showDateRangeDialog = true
+                            TrackerTab.RUNNING_TALLY -> {
+                                editingEntryId = null
+                                buyingGoalId = null
+                                showEntrySheet = true
+                            }
                         }
                     },
                     expanded = true,
@@ -412,13 +418,19 @@ fun TrackerMainScreen(
                     contentColor = Color.White,
                     icon = {
                         Icon(
-                            imageVector = Icons.Default.Add,
+                            imageVector = if (tab == TrackerTab.TRENDS) Icons.Default.DateRange else Icons.Default.Add,
                             contentDescription = null
                         )
                     },
                     text = {
                         Text(
-                            text = stringResource(if (onGoalsTab) R.string.fab_goal else R.string.fab_entry),
+                            text = stringResource(
+                                when (tab) {
+                                    TrackerTab.GOALS -> R.string.fab_goal
+                                    TrackerTab.TRENDS -> R.string.fab_dates
+                                    TrackerTab.RUNNING_TALLY -> R.string.fab_entry
+                                }
+                            ),
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -479,9 +491,6 @@ fun TrackerMainScreen(
                     hiddenCategories = hiddenCategories,
                     onToggleCategory = viewModel::toggleCategorySelection,
                     allCategories = categories,
-                    startDateMillis = startDateMillis,
-                    endDateMillis = endDateMillis,
-                    onDateRangeSelected = viewModel::setDateRange,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
@@ -648,6 +657,18 @@ fun TrackerMainScreen(
                     ?.frequency
             )
         }
+    }
+
+    if (showDateRangeDialog) {
+        TrendsDateRangeDialog(
+            startDateMillis = startDateMillis,
+            endDateMillis = endDateMillis,
+            onDismiss = { showDateRangeDialog = false },
+            onApply = { start, end ->
+                viewModel.setDateRange(start, end)
+                showDateRangeDialog = false
+            }
+        )
     }
 
     val recurringKid = selectedKid
