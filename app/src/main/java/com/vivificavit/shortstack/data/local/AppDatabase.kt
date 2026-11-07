@@ -116,6 +116,15 @@ abstract class AppDatabase : RoomDatabase() {
         /** v6 -> v7: repeating entries, and a link from each entry to the one that added it. */
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
+                // Development builds of v6 made before goals had a buy-by day created `goals`
+                // without `targetDay`; add it so those installs upgrade instead of crashing.
+                val goalColumns = db.query("PRAGMA table_info(`goals`)").use { cursor ->
+                    val name = cursor.getColumnIndexOrThrow("name")
+                    buildSet { while (cursor.moveToNext()) add(cursor.getString(name)) }
+                }
+                if ("targetDay" !in goalColumns) {
+                    db.execSQL("ALTER TABLE `goals` ADD COLUMN `targetDay` INTEGER")
+                }
                 db.execSQL("ALTER TABLE `transactions` ADD COLUMN `recurringId` INTEGER")
                 db.execSQL(
                     """

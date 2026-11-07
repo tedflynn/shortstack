@@ -144,6 +144,39 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate6To7AddsTheBuyByDayToEarlyV6Goals() = runTest {
+        // A v6 database from before goals had a buy-by day: no targetDay column.
+        createDatabase(5).apply {
+            execSQL(
+                "CREATE TABLE `goals` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kidName` TEXT NOT NULL, " +
+                    "`name` TEXT NOT NULL, `targetCents` INTEGER NOT NULL, `icon` TEXT, `createdAt` INTEGER NOT NULL, " +
+                    "`completedAt` INTEGER)"
+            )
+            execSQL("CREATE INDEX `index_goals_kidName` ON `goals` (`kidName`)")
+            execSQL(
+                "CREATE TABLE `goal_moves` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kidName` TEXT NOT NULL, " +
+                    "`goalId` INTEGER NOT NULL, `amountCents` INTEGER NOT NULL, `reason` TEXT NOT NULL, " +
+                    "`timestamp` INTEGER NOT NULL, `transactionId` INTEGER)"
+            )
+            execSQL("CREATE INDEX `index_goal_moves_kidName` ON `goal_moves` (`kidName`)")
+            execSQL("CREATE INDEX `index_goal_moves_goalId` ON `goal_moves` (`goalId`)")
+            execSQL("CREATE INDEX `index_goal_moves_transactionId` ON `goal_moves` (`transactionId`)")
+            execSQL("INSERT INTO goals (kidName, name, targetCents, createdAt) VALUES ('Maya', 'Bike', 9000, 1)")
+            execSQL("PRAGMA user_version = 6")
+            close()
+        }
+
+        val appDb = openAppDatabase()
+        try {
+            val goal = appDb.goalDao().getGoalsForKidOnce("Maya").single()
+            assertEquals("Bike", goal.name)
+            assertEquals(null, goal.targetDay)
+        } finally {
+            appDb.close()
+        }
+    }
+
+    @Test
     fun migrate4To5KeepsCategoriesWithAutomaticIcons() = runTest {
         createDatabase(4).apply {
             execSQL("INSERT INTO categories (name) VALUES ('Allowance'), ('Snacks')")
