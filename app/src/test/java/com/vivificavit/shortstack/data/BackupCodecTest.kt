@@ -2,10 +2,12 @@ package com.vivificavit.shortstack.data
 
 import com.vivificavit.shortstack.data.backup.BackupCodec
 import com.vivificavit.shortstack.data.backup.BackupGoalMove
+import com.vivificavit.shortstack.data.model.Frequency
 import com.vivificavit.shortstack.data.model.Goal
 import com.vivificavit.shortstack.data.model.GoalMove
 import com.vivificavit.shortstack.data.model.GoalMoveReason
 import com.vivificavit.shortstack.data.model.KidProfile
+import com.vivificavit.shortstack.data.model.RecurringEntry
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import org.junit.Assert.assertEquals
@@ -157,6 +159,37 @@ class BackupCodecTest {
         // So is a buy-by day outside the dates the app accepts.
         val farOff = goal.replace("}", ""","targetDay":99999}""")
         assertEquals(null, BackupCodec.decode("""{"goals":[$farOff]}""").goals.values.single().targetDay)
+    }
+
+    @Test
+    fun roundTripsRepeatingEntriesAndDropsBrokenLinks() {
+        val schedule = RecurringEntry(
+            id = 4, kidName = "Sam", title = "Allowance", amountCents = 1_000, type = TransactionType.CREDIT,
+            category = "Allowance", frequency = Frequency.WEEKLY, startTimestamp = 5, occurrences = 2,
+            goalId = 3, goalCents = 200, createdAt = 6
+        )
+        val goal = Goal(id = 3, kidName = "Sam", name = "Game", targetCents = 7_000)
+        val tx = Transaction(id = 7, kidName = "Sam", title = "Allowance", amountCents = 1_000, type = TransactionType.CREDIT, recurringId = 4)
+        val decoded = BackupCodec.decode(
+            BackupCodec.encode(
+                kids = listOf(KidProfile(name = "Sam")), categories = emptyList(), transactions = listOf(tx),
+                goals = listOf(goal), recurring = listOf(schedule)
+            )
+        )
+        assertEquals(mapOf(4L to schedule.copy(id = 0)), decoded.recurring)
+        assertEquals(listOf<Long?>(4), decoded.transactionRecurringRefs)
+
+        // A set-aside for a missing goal, or an entry pointing at a missing schedule, loses only the link.
+        val orphan = BackupCodec.decode(
+            BackupCodec.encode(
+                kids = emptyList(), categories = emptyList(), transactions = listOf(tx.copy(recurringId = 9)),
+                recurring = listOf(schedule)
+            )
+        )
+        assertEquals(null, orphan.recurring.values.single().goalId)
+        assertEquals(null, orphan.recurring.values.single().goalCents)
+        assertEquals(listOf<Long?>(null), orphan.transactionRecurringRefs)
+        assertTrue(runCatching { BackupCodec.decode("""{"recurring":[{"ref":1,"kidName":"Sam","title":"A","amountCents":0,"type":"CREDIT","category":"A","frequency":"WEEKLY","startTimestamp":1}]}""") }.isFailure)
     }
 
     /** A one-entry backup that's valid unless a field is overridden. */

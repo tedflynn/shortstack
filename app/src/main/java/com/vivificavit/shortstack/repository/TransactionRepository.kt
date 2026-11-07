@@ -12,9 +12,11 @@ import com.vivificavit.shortstack.data.model.GoalMove
 import com.vivificavit.shortstack.data.model.GoalMoveReason
 import com.vivificavit.shortstack.data.model.GoalSplit
 import com.vivificavit.shortstack.data.model.KidProfile
+import com.vivificavit.shortstack.data.model.RecurringEntry
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.util.GoalMath
+import com.vivificavit.shortstack.util.RecurringMath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.conflate
@@ -26,6 +28,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.time.ZoneId
 
 /** What deleting an entry removed or changed, so Undo can put it back exactly. */
 data class DeletedEntry(
@@ -44,6 +47,9 @@ data class KidMoneySnapshot(
     val moves: List<GoalMove>
 )
 
+/** How many entries a repeating entry just added. */
+data class AddedRecurring(val entry: RecurringEntry, val count: Int)
+
 /** What deleting a goal removed, so Undo can put it back exactly. */
 data class DeletedGoal(
     val goal: Goal,
@@ -55,6 +61,7 @@ class TransactionRepository(
 ) {
     private val transactionDao = database.transactionDao()
     private val goalDao = database.goalDao()
+    private val recurringDao = database.recurringDao()
 
     val kidNames: Flow<List<String>> = transactionDao.getAllKidNames()
 
@@ -84,6 +91,9 @@ class TransactionRepository(
                 }
             }
             .flowOn(Dispatchers.IO)
+
+    /** A kid's repeating entries, oldest first. */
+    fun getRecurringForKid(kidName: String): Flow<List<RecurringEntry>> = recurringDao.getRecurringForKid(kidName)
 
     val categories: Flow<List<String>> = transactionDao.getAllCategoryNames()
 
@@ -145,6 +155,7 @@ class TransactionRepository(
                 transactionDao.deleteTransactionsForKid(name)
                 goalDao.deleteMovesForKid(name)
                 goalDao.deleteGoalsForKid(name)
+                recurringDao.deleteRecurringForKid(name)
                 transactionDao.deleteKid(name)
             }
         }
@@ -258,6 +269,95 @@ class TransactionRepository(
                 rebalance(kidName)
             }
         }
+    }
+
+    /**
+     * Starts a repeating entry and adds the ones already due: the first, when
+     * it's dated today or earlier, and any missed since. Returns how many it added.
+     */
+    suspend fun addRecurring(
+        entry: RecurringEntry,
+        now: Long = System.currentTimeMillis(),
+        zone: ZoneId = ZoneId.systemDefault()
+    ): Int = withContext(Dispatchers.IO) {
+        database.withTransaction {
+            transactionDao.insertKid(KidProfile(name = entry.kidName))
+            transactionDao.insertCategory(CategoryEntity(name = entry.category))
+            val id = recurringDao.upsertRecurring(entry.copy(occurrences = 0))
+            addDue(entry.copy(id = id, occurrences = 0), now, zone)
+        }
+    }
+
+    /** Saves changes to a repeating entry. They apply to the entries it adds from now on. */
+    suspend fun saveRecurring(entry: RecurringEntry) {
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                transactionDao.insertCategory(CategoryEntity(name = entry.category))
+                // Keep the count from the database, in case entries were added while this was being edited.
+                val current = recurringDao.getRecurring(entry.id) ?: return@withTransaction
+                recurringDao.upsertRecurring(entry.copy(occurrences = current.occurrences))
+            }
+        }
+    }
+
+    /** Stops a repeating entry. Entries it already added stay in the ledger. */
+    suspend fun deleteRecurring(entry: RecurringEntry): RecurringEntry = withContext(Dispatchers.IO) {
+        val current = recurringDao.getRecurring(entry.id) ?: entry
+        recurringDao.deleteRecurring(entry.id)
+        current
+    }
+
+    /** Undoes [deleteRecurring]; anything that came due in between is added on the next catch-up. */
+    suspend fun restoreRecurring(entry: RecurringEntry) {
+        withContext(Dispatchers.IO) { recurringDao.upsertRecurring(entry) }
+    }
+
+    /** Adds every repeating entry that has come due, for every kid. Each is only ever added once. */
+    suspend fun addDueRecurring(
+        now: Long = System.currentTimeMillis(),
+        zone: ZoneId = ZoneId.systemDefault()
+    ): List<AddedRecurring> = withContext(Dispatchers.IO) {
+        database.withTransaction {
+            // Read inside the transaction, so two catch-ups at once can't both add the same entry.
+            recurringDao.getAllRecurringOnce().mapNotNull { entry ->
+                addDue(entry, now, zone).takeIf { it > 0 }?.let { AddedRecurring(entry, it) }
+            }
+        }
+    }
+
+    private suspend fun addDue(entry: RecurringEntry, now: Long, zone: ZoneId): Int {
+        val due = RecurringMath.dueTimestamps(entry, now, zone)
+        due.forEach { timestamp ->
+            insertTransaction(
+                Transaction(
+                    kidName = entry.kidName,
+                    title = entry.title,
+                    amountCents = entry.amountCents,
+                    type = entry.type,
+                    category = entry.category,
+                    timestamp = timestamp,
+                    recurringId = entry.id
+                ),
+                split = recurringSplit(entry)
+            )
+        }
+        if (due.isNotEmpty()) recurringDao.upsertRecurring(entry.copy(occurrences = entry.occurrences + due.size))
+        return due.size
+    }
+
+    /**
+     * What a repeating income sets aside this time: its fixed amount, but no more
+     * than the goal still needs, so the rest stays pocket money. Nothing once the
+     * goal is reached, bought or deleted.
+     */
+    private suspend fun recurringSplit(entry: RecurringEntry): GoalSplit? {
+        if (entry.type != TransactionType.CREDIT) return null
+        val goalId = entry.goalId ?: return null
+        val cents = entry.goalCents ?: return null
+        val goal = goalDao.getGoal(goalId)?.takeIf { it.completedAt == null } ?: return null
+        val saved = goalDao.getMovesForGoal(goalId).sumOf { it.amountCents }
+        val amount = minOf(cents, entry.amountCents, GoalMath.remainingCents(goal, saved))
+        return if (amount > 0L) GoalSplit(goalId, amount) else null
     }
 
     /** Adds a goal, or saves changes to one (matched by id). Returns its id. */
@@ -392,7 +492,8 @@ class TransactionRepository(
                         transactions = transactions,
                         categoryIcons = categories.mapNotNull { c -> c.icon?.let { c.name to it } }.toMap(),
                         goals = goalDao.getAllGoalsOnce(),
-                        goalMoves = goalDao.getAllMovesOnce()
+                        goalMoves = goalDao.getAllMovesOnce(),
+                        recurring = recurringDao.getAllRecurringOnce()
                     ) to transactions.size
                 }
                 writer.write(payload.first)
@@ -430,18 +531,23 @@ class TransactionRepository(
                     transactionDao.deleteAllCategories()
                     goalDao.deleteAllMoves()
                     goalDao.deleteAllGoals()
+                    recurringDao.deleteAllRecurring()
                 }
                 backup.kids.forEach { transactionDao.insertKid(it) }
                 backup.categories.forEach { name ->
                     transactionDao.insertCategory(CategoryEntity(name = name, icon = backup.categoryIcons[name.lowercase()]))
                 }
-                // Entries and goals get new ids here, so goal moves are pointed at those.
+                // Goals, repeating entries and entries get new ids here, so links are pointed at those.
+                val goalIds = backup.goals.mapValues { (_, goal) -> goalDao.upsertGoal(goal) }
+                val recurringIds = backup.recurring.mapValues { (_, entry) ->
+                    recurringDao.upsertRecurring(entry.copy(goalId = entry.goalId?.let(goalIds::get)))
+                }
                 val entryIds = mutableMapOf<Long, Long>()
                 backup.transactions.forEachIndexed { index, transaction ->
-                    val id = transactionDao.insert(transaction)
+                    val recurringId = backup.transactionRecurringRefs.getOrNull(index)?.let(recurringIds::get)
+                    val id = transactionDao.insert(transaction.copy(recurringId = recurringId))
                     backup.transactionRefs.getOrNull(index)?.let { ref -> entryIds[ref] = id }
                 }
-                val goalIds = backup.goals.mapValues { (_, goal) -> goalDao.upsertGoal(goal) }
                 goalDao.insertMoves(
                     backup.goalMoves.map { move ->
                         GoalMove(

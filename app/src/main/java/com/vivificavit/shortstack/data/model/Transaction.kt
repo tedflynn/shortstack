@@ -52,12 +52,52 @@ data class Transaction(
     val amountCents: Long,
     val type: TransactionType,
     val category: String = DefaultCategories.DEFAULT_CATEGORIES.first(),
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    /** The [RecurringEntry] that added this entry; null when it was entered by hand. */
+    val recurringId: Long? = null
 ) {
     init {
         require(amountCents > 0L) { "Transaction amount must always be positive." }
         require(title.isNotBlank()) { "Transaction title cannot be blank." }
         require(kidName.isNotBlank()) { "Kid name cannot be blank." }
+    }
+}
+
+/** How often a [RecurringEntry] comes due. */
+@Serializable
+enum class Frequency { WEEKLY, EVERY_2_WEEKS, MONTHLY }
+
+/**
+ * An entry that repeats, like an allowance or a subscription. Each time it comes
+ * due, the app adds a [Transaction] for it (see RecurringMath).
+ */
+@Entity(
+    tableName = "recurring_entries",
+    indices = [Index(value = ["kidName"])]
+)
+data class RecurringEntry(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0L,
+    val kidName: String,
+    val title: String,
+    val amountCents: Long,
+    val type: TransactionType,
+    val category: String,
+    val frequency: Frequency,
+    /** When the first entry was dated; later ones repeat from it, so monthly dates don't drift. */
+    val startTimestamp: Long,
+    /** How many entries it has added so far; the next one is number [occurrences] (from 0). */
+    val occurrences: Int = 0,
+    /** For income: the goal that gets [goalCents] of each entry, while it's still being saved for. */
+    val goalId: Long? = null,
+    val goalCents: Long? = null,
+    val createdAt: Long = System.currentTimeMillis()
+) {
+    init {
+        require(amountCents > 0L) { "Recurring amount must be positive." }
+        require(title.isNotBlank()) { "Recurring title cannot be blank." }
+        require(kidName.isNotBlank()) { "Kid name cannot be blank." }
+        require(occurrences >= 0) { "Occurrences cannot be negative." }
     }
 }
 

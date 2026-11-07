@@ -25,6 +25,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -384,6 +385,15 @@ fun TransactionRowCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1
                         )
+                        // A small mark, not a label, for entries a repeating entry added.
+                        if (transaction.recurringId != null) {
+                            Icon(
+                                imageVector = Icons.Default.Repeat,
+                                contentDescription = stringResource(R.string.cd_repeats),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
                     if (largeText) {
                         Spacer(modifier = Modifier.height(4.dp))

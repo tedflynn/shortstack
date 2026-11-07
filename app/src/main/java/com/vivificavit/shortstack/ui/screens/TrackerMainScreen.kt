@@ -64,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.data.model.Goal
@@ -76,6 +77,7 @@ import com.vivificavit.shortstack.ui.components.GoalDetailSheet
 import com.vivificavit.shortstack.ui.components.GoalEditDialog
 import com.vivificavit.shortstack.ui.components.ManageCategoriesDialog
 import com.vivificavit.shortstack.ui.components.MoveMoneyDialog
+import com.vivificavit.shortstack.ui.components.RepeatingEntriesDialog
 import com.vivificavit.shortstack.ui.components.RestoreBackupDialog
 import com.vivificavit.shortstack.ui.theme.EntryButtonNavy
 import com.vivificavit.shortstack.ui.viewmodel.TrackerViewModel
@@ -117,12 +119,22 @@ fun TrackerMainScreen(
     val lastCategoryByType by viewModel.lastCategoryByType.collectAsStateWithLifecycle()
     val startDateMillis by viewModel.startDateMillis.collectAsStateWithLifecycle()
     val endDateMillis by viewModel.endDateMillis.collectAsStateWithLifecycle()
+    val recurring by viewModel.recurring.collectAsStateWithLifecycle()
+
+    // Add repeating entries that came due while the app was closed or in the background.
+    LifecycleStartEffect(viewModel) {
+        viewModel.addDueRecurring()
+        onStopOrDispose { }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     var kidMenuExpanded by remember { mutableStateOf(false) }
     var showAddKidDialog by rememberSaveable { mutableStateOf(false) }
     var showEditKidsDialog by rememberSaveable { mutableStateOf(false) }
     var showManageCategoriesDialog by rememberSaveable { mutableStateOf(false) }
+    var showRecurringDialog by rememberSaveable { mutableStateOf(false) }
+    // The repeating entry open for editing in the entry sheet.
+    var editingRecurringId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showRestoreConfirm by rememberSaveable { mutableStateOf(false) }
     var overflowExpanded by remember { mutableStateOf(false) }
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(TrackerTab.RUNNING_TALLY.ordinal) }
@@ -339,6 +351,15 @@ fun TrackerMainScreen(
                                     showManageCategoriesDialog = true
                                 }
                             )
+                            if (selectedKid != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.menu_recurring)) },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        showRecurringDialog = true
+                                    }
+                                )
+                            }
                         }
                     }
                 )
@@ -599,7 +620,8 @@ fun TrackerMainScreen(
                             category = draft.category,
                             timestamp = draft.timestamp,
                             split = draft.split,
-                            coverGoalId = draft.coverGoalId
+                            coverGoalId = draft.coverGoalId,
+                            repeat = draft.repeat
                         )
                         else -> viewModel.updateTransaction(
                             editingEntry.copy(
@@ -618,7 +640,54 @@ fun TrackerMainScreen(
                 onDelete = {
                     editingEntry?.let(viewModel::deleteTransaction)
                     closeSheet()
-                }
+                },
+                existingRepeat = editingEntry?.recurringId
+                    ?.let { id -> recurring.firstOrNull { it.id == id } }
+                    ?.frequency
+            )
+        }
+    }
+
+    val recurringKid = selectedKid
+    if (showRecurringDialog && recurringKid != null) {
+        RepeatingEntriesDialog(
+            kidName = recurringKid,
+            entries = recurring,
+            goalNames = goalsState?.active.orEmpty().associate { it.goal.id to it.goal.name },
+            onEdit = { editingRecurringId = it.id },
+            onStop = viewModel::stopRecurring,
+            onDismiss = { showRecurringDialog = false }
+        )
+    }
+
+    val editingRecurring = editingRecurringId?.let { id -> recurring.firstOrNull { it.id == id } }
+    if (editingRecurring != null && recurringKid != null) {
+        key(editingRecurringId) {
+            EntryBottomSheet(
+                kidName = recurringKid,
+                categories = categories,
+                lastCategoryByType = lastCategoryByType,
+                existing = null,
+                money = ledger?.let { EntryMoney.from(it, goalsState, null) },
+                buyingGoal = null,
+                onDismiss = { editingRecurringId = null },
+                onAddCategory = viewModel::addCategory,
+                onSave = { draft ->
+                    viewModel.updateRecurring(
+                        editingRecurring.copy(
+                            title = draft.title,
+                            amountCents = draft.amountCents,
+                            type = draft.type,
+                            category = draft.category,
+                            frequency = draft.repeat ?: editingRecurring.frequency,
+                            goalId = draft.split?.goalId,
+                            goalCents = draft.split?.amountCents
+                        )
+                    )
+                    editingRecurringId = null
+                },
+                onDelete = { },
+                schedule = editingRecurring
             )
         }
     }
