@@ -384,12 +384,34 @@ private fun CategoryIconDialog(
     onPick: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val suggested = remember(category, notes) { EntryIcons.suggestedFor(category, notes) }
+    IconPickerDialog(
+        title = stringResource(R.string.category_icon_title, category),
+        hint = stringResource(R.string.category_icon_hint),
+        chosenKey = chosenKey,
+        suggested = remember(category, notes) { EntryIcons.suggestedFor(category, notes) },
+        onPick = onPick,
+        onDismiss = onDismiss
+    )
+}
+
+/**
+ * Picks one of the [EntryIcons], or Automatic (null). The [suggested] icons
+ * come first, then every icon grouped by theme. Picking anything closes the dialog.
+ */
+@Composable
+fun IconPickerDialog(
+    title: String,
+    hint: String,
+    chosenKey: String?,
+    suggested: List<EntryIcon>,
+    onPick: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
     val themes = remember { EntryIcons.all.groupBy { it.theme } }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.category_icon_title, category), fontWeight = FontWeight.Bold) },
+        title = { Text(title, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -405,7 +427,7 @@ private fun CategoryIconDialog(
                     }
                 )
                 Text(
-                    text = stringResource(R.string.category_icon_hint),
+                    text = hint,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

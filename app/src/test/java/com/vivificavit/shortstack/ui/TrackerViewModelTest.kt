@@ -6,6 +6,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.data.local.AppDatabase
 import com.vivificavit.shortstack.data.local.SelectedKidStore
+import com.vivificavit.shortstack.data.model.Goal
+import com.vivificavit.shortstack.data.model.GoalSplit
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.repository.TransactionRepository
@@ -263,5 +265,167 @@ class TrackerViewModelTest {
 
         assertTrue(repository.importFromJson({ file.toByteArray().inputStream() }, replaceExisting = true).isSuccess)
         assertEquals(mapOf("snacks" to "candy"), repository.categoryIcons.first())
+    }
+
+    private suspend fun income(cents: Long, title: String = "Allowance") =
+        repository.insertTransaction(
+            Transaction(kidName = "Sam", title = title, amountCents = cents, type = TransactionType.CREDIT)
+        )
+
+    private suspend fun goal(name: String, targetCents: Long = 7_000, createdAt: Long = 1) =
+        repository.saveGoal(Goal(kidName = "Sam", name = name, targetCents = targetCents, createdAt = createdAt))
+
+    @Test
+    fun settingMoneyAsideChangesPocketMoneyButNotTheTotal() = runBlocking {
+        income(5_000)
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
+        vm.addGoal("New video game", 7_000, icon = null)
+        val gameId = vm.goals.awaitValue { it?.active?.size == 1 }!!.active.single().goal.id
+
+        vm.moveMoney(fromGoalId = null, toGoalId = gameId, amountCents = 2_000)
+        val ledger = vm.ledger.awaitValue { it?.pocketCents == 3_000L }!!
+        assertEquals(5_000L, ledger.balanceCents)
+        assertEquals(2_000L, ledger.savedCents)
+        assertEquals(5_000L, vm.goals.awaitValue { it != null }!!.active.single().remainingCents)
+
+        // Only pocket money can be set aside.
+        assertEquals(false, repository.moveMoney("Sam", null, gameId, 3_001))
+    }
+
+    @Test
+    fun incomeSplitIsSetAsideAndUndoBringsItBack() = runBlocking {
+        val gameId = goal("Game")
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
+        vm.goals.awaitValue { it != null }
+        vm.addTransaction("Allowance", 1_000, TransactionType.CREDIT, "Allowance", split = GoalSplit(gameId, 200))
+        val ledger = vm.ledger.awaitValue { it?.savedCents == 200L }!!
+        assertEquals(800L, ledger.pocketCents)
+        val entry = ledger.transactions.single()
+        assertEquals(listOf(200L), ledger.movesByEntry[entry.id]?.map { it.amountCents })
+
+        val message = async(start = CoroutineStart.UNDISPATCHED) {
+            vm.uiMessages.awaitValue { it.resId == R.string.message_entry_deleted }
+        }
+        vm.deleteTransaction(entry)
+        val deleted = message.await()
+        vm.ledger.awaitValue { it?.transactions?.isEmpty() == true && it.savedCents == 0L }
+
+        deleted.onUndo!!.invoke()
+        val restored = vm.ledger.awaitValue { it?.savedCents == 200L }!!
+        assertEquals(800L, restored.pocketCents)
+        assertEquals(entry, restored.transactions.single())
+    }
+
+    @Test
+    fun overspendingTakesFromTheChosenGoalAndDeletingGivesItBack() = runBlocking {
+        income(5_000)
+        val older = goal("Helmet", createdAt = 1)
+        val newer = goal("Game", createdAt = 2)
+        repository.moveMoney("Sam", null, older, 2_000)
+        repository.moveMoney("Sam", null, newer, 1_000)
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
+        vm.ledger.awaitValue { it?.pocketCents == 2_000L }
+
+        // $40 with $20 of pocket money: $10 from the chosen goal, then $10 from the other.
+        vm.addTransaction("Lego set", 4_000, TransactionType.DEBIT, "Toy", coverGoalId = newer)
+        val ledger = vm.ledger.awaitValue { it?.balanceCents == 1_000L && it.savedCents == 1_000L }!!
+        assertEquals(0L, ledger.pocketCents)
+        val saved = vm.goals.awaitValue { it != null }!!.active.associate { it.goal.id to it.savedCents }
+        assertEquals(mapOf(older to 1_000L, newer to 0L), saved)
+
+        vm.deleteTransaction(ledger.transactions.first { it.title == "Lego set" })
+        val back = vm.goals.awaitValue { state -> state?.active?.sumOf { it.savedCents } == 3_000L }!!
+        assertEquals(mapOf(older to 2_000L, newer to 1_000L), back.active.associate { it.goal.id to it.savedCents })
+        assertEquals(2_000L, back.pocketCents)
+    }
+
+    @Test
+    fun buyingAGoalLeavesTheChangeInPocketMoneyAndDeletingTheExpenseReopensIt() = runBlocking {
+        income(8_000)
+        val gameId = goal("Game")
+        repository.moveMoney("Sam", null, gameId, 7_000)
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
+        val game = vm.goals.awaitValue { it?.active?.singleOrNull()?.isReached == true }!!.active.single().goal
+
+        vm.buyGoal(game, "Game", 6_500, "Video Game", timestamp = 10)
+        val goals = vm.goals.awaitValue { it?.done?.size == 1 }!!
+        assertEquals(emptyList<Any>(), goals.active)
+        assertEquals(6_500L, goals.done.single().paidCents)
+        val ledger = vm.ledger.awaitValue { it?.balanceCents == 1_500L }!!
+        assertEquals(1_500L, ledger.pocketCents)
+
+        vm.deleteTransaction(ledger.transactions.first { it.title == "Game" })
+        val reopened = vm.goals.awaitValue { it?.active?.size == 1 }!!.active.single()
+        assertEquals(7_000L, reopened.savedCents)
+        assertEquals(null, reopened.goal.completedAt)
+    }
+
+    @Test
+    fun deletingAGoalReturnsItsMoneyAndUndoPutsItBack() = runBlocking {
+        income(5_000)
+        val gameId = goal("Game")
+        repository.moveMoney("Sam", null, gameId, 2_000)
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
+        val game = vm.goals.awaitValue { it?.active?.size == 1 }!!.active.single().goal
+
+        val message = async(start = CoroutineStart.UNDISPATCHED) {
+            vm.uiMessages.awaitValue { it.resId == R.string.message_goal_deleted }
+        }
+        vm.deleteGoal(game)
+        val deleted = message.await()
+        vm.ledger.awaitValue { it?.pocketCents == 5_000L && it.activeGoalCount == 0 }
+
+        deleted.onUndo!!.invoke()
+        val restored = vm.goals.awaitValue { it?.active?.size == 1 }!!
+        assertEquals(2_000L, restored.active.single().savedCents)
+        assertEquals(3_000L, restored.pocketCents)
+    }
+
+    @Test
+    fun reachingAGoalCheers() = runBlocking {
+        income(5_000)
+        val gameId = goal("Game", targetCents = 2_000)
+        val vm = TrackerViewModel(repository, FakeStore(initial = "Sam"))
+        vm.goals.awaitValue { it?.active?.size == 1 }
+
+        val message = async(start = CoroutineStart.UNDISPATCHED) {
+            vm.uiMessages.awaitValue { it.resId == R.string.message_goal_reached }
+        }
+        vm.moveMoney(null, gameId, 2_000)
+        assertEquals(listOf("Game"), message.await().args)
+    }
+
+    @Test
+    fun goalsAndSplitsSurviveBackupAndRestore() = runBlocking {
+        income(5_000)
+        val gameId = goal("Game")
+        repository.insertTransaction(
+            Transaction(kidName = "Sam", title = "Chores", amountCents = 1_000, type = TransactionType.CREDIT),
+            split = GoalSplit(gameId, 200)
+        )
+        repository.moveMoney("Sam", null, gameId, 1_000)
+
+        val file = java.io.ByteArrayOutputStream()
+        assertTrue(repository.exportToJson { file }.isSuccess)
+        repository.deleteKidAndEntries("Sam")
+        assertTrue(repository.importFromJson({ file.toByteArray().inputStream() }, replaceExisting = true).isSuccess)
+
+        val money = repository.getMoneyForKid("Sam").first()
+        val restoredGoal = money.goals.single()
+        assertEquals("Game", restoredGoal.name)
+        assertEquals(1_200L, money.moves.filter { it.goalId == restoredGoal.id }.sumOf { it.amountCents })
+        val chores = money.transactions.single { it.title == "Chores" }
+        assertEquals(listOf(200L), money.moves.filter { it.transactionId == chores.id }.map { it.amountCents })
+    }
+
+    @Test
+    fun removingKidRemovesTheirGoals() = runBlocking {
+        income(5_000)
+        val gameId = goal("Game")
+        repository.moveMoney("Sam", null, gameId, 2_000)
+
+        repository.deleteKidAndEntries("Sam")
+        assertEquals(emptyList<Goal>(), repository.getGoalsForKid("Sam").first())
+        assertEquals(emptyList<Any>(), repository.getGoalMovesForKid("Sam").first())
     }
 }

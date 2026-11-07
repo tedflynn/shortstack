@@ -64,12 +64,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vivificavit.shortstack.R
+import com.vivificavit.shortstack.data.model.Goal
 import com.vivificavit.shortstack.ui.components.AddKidDialog
 import com.vivificavit.shortstack.ui.components.EntryBottomSheet
+import com.vivificavit.shortstack.ui.components.EntryMoney
 import com.vivificavit.shortstack.ui.components.EditKidsDialog
+import com.vivificavit.shortstack.ui.components.GoalActions
+import com.vivificavit.shortstack.ui.components.GoalDetailSheet
+import com.vivificavit.shortstack.ui.components.GoalEditDialog
 import com.vivificavit.shortstack.ui.components.ManageCategoriesDialog
+import com.vivificavit.shortstack.ui.components.MoveMoneyDialog
+import com.vivificavit.shortstack.ui.components.RepeatingEntriesDialog
 import com.vivificavit.shortstack.ui.components.RestoreBackupDialog
 import com.vivificavit.shortstack.ui.theme.EntryButtonNavy
 import com.vivificavit.shortstack.ui.viewmodel.TrackerViewModel
@@ -80,8 +88,8 @@ import kotlinx.coroutines.launch
 
 enum class TrackerTab(@StringRes val titleRes: Int) {
     RUNNING_TALLY(R.string.tab_ledger),
-    INCOME(R.string.tab_income),
-    EXPENSES(R.string.tab_expenses)
+    GOALS(R.string.tab_goals),
+    TRENDS(R.string.tab_trends)
 }
 
 /** Machine-readable, so the backup file name sorts by date in any locale. */
@@ -99,6 +107,7 @@ fun TrackerMainScreen(
     val selectedKid by viewModel.selectedKid.collectAsStateWithLifecycle()
     val hasNoKids by viewModel.hasNoKids.collectAsStateWithLifecycle()
     val ledger by viewModel.ledger.collectAsStateWithLifecycle()
+    val goals by viewModel.goals.collectAsStateWithLifecycle()
     val incomeSums by viewModel.incomeSums.collectAsStateWithLifecycle()
     val spendingSums by viewModel.spendingSums.collectAsStateWithLifecycle()
     val hiddenCategories by viewModel.hiddenCategories.collectAsStateWithLifecycle()
@@ -110,18 +119,71 @@ fun TrackerMainScreen(
     val lastCategoryByType by viewModel.lastCategoryByType.collectAsStateWithLifecycle()
     val startDateMillis by viewModel.startDateMillis.collectAsStateWithLifecycle()
     val endDateMillis by viewModel.endDateMillis.collectAsStateWithLifecycle()
+    val recurring by viewModel.recurring.collectAsStateWithLifecycle()
+
+    // Add repeating entries that came due while the app was closed or in the background.
+    LifecycleStartEffect(viewModel) {
+        viewModel.addDueRecurring()
+        onStopOrDispose { }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     var kidMenuExpanded by remember { mutableStateOf(false) }
     var showAddKidDialog by rememberSaveable { mutableStateOf(false) }
     var showEditKidsDialog by rememberSaveable { mutableStateOf(false) }
     var showManageCategoriesDialog by rememberSaveable { mutableStateOf(false) }
+    var showRecurringDialog by rememberSaveable { mutableStateOf(false) }
+    // The repeating entry open for editing in the entry sheet.
+    var editingRecurringId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showRestoreConfirm by rememberSaveable { mutableStateOf(false) }
     var overflowExpanded by remember { mutableStateOf(false) }
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(TrackerTab.RUNNING_TALLY.ordinal) }
     var showEntrySheet by rememberSaveable { mutableStateOf(false) }
     // The id of the entry open for editing; null means the sheet adds a new one.
     var editingEntryId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Set when the entry sheet is recording a goal being bought.
+    var buyingGoalId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showGoalDialog by rememberSaveable { mutableStateOf(false) }
+    // The id of the goal open for editing; null means the dialog adds a new one.
+    var editingGoalId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var detailGoalId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showMoveDialog by rememberSaveable { mutableStateOf(false) }
+    // Where Move money starts; null is pocket money.
+    var moveFromGoalId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var moveToGoalId by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    val goalActions = remember(viewModel) {
+        object : GoalActions {
+            override fun open(goal: Goal) {
+                detailGoalId = goal.id
+            }
+
+            override fun addMoney(goal: Goal) {
+                moveFromGoalId = null
+                moveToGoalId = goal.id
+                showMoveDialog = true
+            }
+
+            override fun moveMoney(goal: Goal) {
+                moveFromGoalId = goal.id
+                moveToGoalId = null
+                showMoveDialog = true
+            }
+
+            override fun edit(goal: Goal) {
+                editingGoalId = goal.id
+                showGoalDialog = true
+            }
+
+            override fun buy(goal: Goal) {
+                editingEntryId = null
+                buyingGoalId = goal.id
+                showEntrySheet = true
+            }
+
+            override fun delete(goal: Goal) = viewModel.deleteGoal(goal)
+        }
+    }
 
     val exportBackupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -289,6 +351,15 @@ fun TrackerMainScreen(
                                     showManageCategoriesDialog = true
                                 }
                             )
+                            if (selectedKid != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.menu_recurring)) },
+                                    onClick = {
+                                        overflowExpanded = false
+                                        showRecurringDialog = true
+                                    }
+                                )
+                            }
                         }
                     }
                 )
@@ -322,10 +393,18 @@ fun TrackerMainScreen(
         floatingActionButtonPosition = FabPosition.End,
         floatingActionButton = {
             if (selectedKid != null) {
+                // On the Goals tab the button adds a goal; everywhere else, an entry.
+                val onGoalsTab = selectedTabIndex == TrackerTab.GOALS.ordinal
                 ExtendedFloatingActionButton(
                     onClick = {
-                        editingEntryId = null
-                        showEntrySheet = true
+                        if (onGoalsTab) {
+                            editingGoalId = null
+                            showGoalDialog = true
+                        } else {
+                            editingEntryId = null
+                            buyingGoalId = null
+                            showEntrySheet = true
+                        }
                     },
                     expanded = true,
                     containerColor = EntryButtonNavy,
@@ -336,7 +415,12 @@ fun TrackerMainScreen(
                             contentDescription = null
                         )
                     },
-                    text = { Text(text = stringResource(R.string.fab_entry), fontWeight = FontWeight.SemiBold) }
+                    text = {
+                        Text(
+                            text = stringResource(if (onGoalsTab) R.string.fab_goal else R.string.fab_entry),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 )
             }
         }
@@ -361,35 +445,35 @@ fun TrackerMainScreen(
                     categoryIcons = categoryIcons,
                     onEditTransaction = { transaction ->
                         editingEntryId = transaction.id
+                        buyingGoalId = null
                         showEntrySheet = true
                     },
                     onDeleteTransaction = viewModel::deleteTransaction,
+                    onShowGoals = { selectedTabIndex = TrackerTab.GOALS.ordinal },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
                 )
             }
 
-            TrackerTab.INCOME -> {
-                CategoryBreakdownTabContent(
-                    kind = BreakdownKind.INCOME,
-                    allSums = incomeSums,
-                    hiddenCategories = hiddenCategories,
-                    onToggleCategory = viewModel::toggleCategorySelection,
-                    allCategories = categories,
-                    startDateMillis = startDateMillis,
-                    endDateMillis = endDateMillis,
-                    onDateRangeSelected = viewModel::setDateRange,
+            TrackerTab.GOALS -> {
+                GoalsTabContent(
+                    goals = goals,
+                    actions = goalActions,
+                    onAddGoal = {
+                        editingGoalId = null
+                        showGoalDialog = true
+                    },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
                 )
             }
 
-            TrackerTab.EXPENSES -> {
-                CategoryBreakdownTabContent(
-                    kind = BreakdownKind.EXPENSES,
-                    allSums = spendingSums,
+            TrackerTab.TRENDS -> {
+                TrendsTabContent(
+                    incomeSums = incomeSums,
+                    spendingSums = spendingSums,
                     hiddenCategories = hiddenCategories,
                     onToggleCategory = viewModel::toggleCategorySelection,
                     allCategories = categories,
@@ -447,41 +531,108 @@ fun TrackerMainScreen(
         )
     }
 
+    val goalsState = goals
+    val allGoals = goalsState?.let { it.active + it.done }.orEmpty()
+
+    if (showGoalDialog) {
+        val editingGoal = editingGoalId?.let { id -> allGoals.firstOrNull { it.goal.id == id }?.goal }
+        fun closeGoalDialog() {
+            showGoalDialog = false
+            editingGoalId = null
+        }
+        if (editingGoalId == null || editingGoal != null) {
+            GoalEditDialog(
+                existing = editingGoal,
+                onDismiss = ::closeGoalDialog,
+                onSave = { name, targetCents, icon, targetDay ->
+                    if (editingGoal == null) {
+                        viewModel.addGoal(name, targetCents, icon, targetDay)
+                    } else {
+                        viewModel.updateGoal(
+                            editingGoal.copy(name = name, targetCents = targetCents, icon = icon, targetDay = targetDay)
+                        )
+                    }
+                    closeGoalDialog()
+                }
+            )
+        }
+    }
+
+    if (showMoveDialog && goalsState != null) {
+        MoveMoneyDialog(
+            goals = goalsState,
+            initialFromGoalId = moveFromGoalId,
+            initialToGoalId = moveToGoalId,
+            onDismiss = { showMoveDialog = false },
+            onMove = { fromGoalId, toGoalId, amountCents ->
+                viewModel.moveMoney(fromGoalId, toGoalId, amountCents)
+                showMoveDialog = false
+            }
+        )
+    }
+
+    val detailGoal = detailGoalId?.let { id -> allGoals.firstOrNull { it.goal.id == id } }
+    if (detailGoal != null && goalsState != null) {
+        GoalDetailSheet(
+            progress = detailGoal,
+            history = goalsState.history[detailGoal.goal.id].orEmpty(),
+            actions = goalActions,
+            onDismiss = { detailGoalId = null }
+        )
+    }
+
     val entryKid = selectedKid
     // While editing, wait for the entry to be found in the loaded ledger.
     val editingEntry = editingEntryId?.let { id -> ledger?.transactions?.firstOrNull { it.id == id } }
-    if (showEntrySheet && entryKid != null && (editingEntryId == null || editingEntry != null)) {
+    val buyingGoal = buyingGoalId?.let { id -> goalsState?.active?.firstOrNull { it.goal.id == id } }
+    if (showEntrySheet && entryKid != null && (editingEntryId == null || editingEntry != null) &&
+        (buyingGoalId == null || buyingGoal != null)
+    ) {
         fun closeSheet() {
             showEntrySheet = false
             editingEntryId = null
+            buyingGoalId = null
         }
         // Keyed so switching between entries starts the form fresh.
-        key(editingEntryId) {
+        key(editingEntryId, buyingGoalId) {
             EntryBottomSheet(
                 kidName = entryKid,
                 categories = categories,
                 lastCategoryByType = lastCategoryByType,
                 existing = editingEntry,
+                money = ledger?.let { EntryMoney.from(it, goalsState, editingEntry) },
+                buyingGoal = buyingGoal,
                 onDismiss = ::closeSheet,
                 onAddCategory = viewModel::addCategory,
-                onSave = { title, amountCents, type, category, timestamp ->
-                    if (editingEntry == null) {
-                        viewModel.addTransaction(
-                            title = title,
-                            amountCents = amountCents,
-                            type = type,
-                            category = category,
-                            timestamp = timestamp
+                onSave = { draft ->
+                    when {
+                        buyingGoal != null -> viewModel.buyGoal(
+                            goal = buyingGoal.goal,
+                            title = draft.title,
+                            amountCents = draft.amountCents,
+                            category = draft.category,
+                            timestamp = draft.timestamp
                         )
-                    } else {
-                        viewModel.updateTransaction(
+                        editingEntry == null -> viewModel.addTransaction(
+                            title = draft.title,
+                            amountCents = draft.amountCents,
+                            type = draft.type,
+                            category = draft.category,
+                            timestamp = draft.timestamp,
+                            split = draft.split,
+                            coverGoalId = draft.coverGoalId,
+                            repeat = draft.repeat
+                        )
+                        else -> viewModel.updateTransaction(
                             editingEntry.copy(
-                                title = title,
-                                amountCents = amountCents,
-                                type = type,
-                                category = category,
-                                timestamp = timestamp
-                            )
+                                title = draft.title,
+                                amountCents = draft.amountCents,
+                                type = draft.type,
+                                category = draft.category,
+                                timestamp = draft.timestamp
+                            ),
+                            split = draft.split,
+                            coverGoalId = draft.coverGoalId
                         )
                     }
                     closeSheet()
@@ -489,7 +640,54 @@ fun TrackerMainScreen(
                 onDelete = {
                     editingEntry?.let(viewModel::deleteTransaction)
                     closeSheet()
-                }
+                },
+                existingRepeat = editingEntry?.recurringId
+                    ?.let { id -> recurring.firstOrNull { it.id == id } }
+                    ?.frequency
+            )
+        }
+    }
+
+    val recurringKid = selectedKid
+    if (showRecurringDialog && recurringKid != null) {
+        RepeatingEntriesDialog(
+            kidName = recurringKid,
+            entries = recurring,
+            goalNames = goalsState?.active.orEmpty().associate { it.goal.id to it.goal.name },
+            onEdit = { editingRecurringId = it.id },
+            onStop = viewModel::stopRecurring,
+            onDismiss = { showRecurringDialog = false }
+        )
+    }
+
+    val editingRecurring = editingRecurringId?.let { id -> recurring.firstOrNull { it.id == id } }
+    if (editingRecurring != null && recurringKid != null) {
+        key(editingRecurringId) {
+            EntryBottomSheet(
+                kidName = recurringKid,
+                categories = categories,
+                lastCategoryByType = lastCategoryByType,
+                existing = null,
+                money = ledger?.let { EntryMoney.from(it, goalsState, null) },
+                buyingGoal = null,
+                onDismiss = { editingRecurringId = null },
+                onAddCategory = viewModel::addCategory,
+                onSave = { draft ->
+                    viewModel.updateRecurring(
+                        editingRecurring.copy(
+                            title = draft.title,
+                            amountCents = draft.amountCents,
+                            type = draft.type,
+                            category = draft.category,
+                            frequency = draft.repeat ?: editingRecurring.frequency,
+                            goalId = draft.split?.goalId,
+                            goalCents = draft.split?.amountCents
+                        )
+                    )
+                    editingRecurringId = null
+                },
+                onDelete = { },
+                schedule = editingRecurring
             )
         }
     }
