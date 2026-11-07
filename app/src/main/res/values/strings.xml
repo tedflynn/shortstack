@@ -13,9 +13,8 @@
     <string name="menu_restore_backup">Restore backup…</string>
     <string name="menu_manage_categories">Manage categories</string>
     <string name="tab_ledger">Ledger</string>
-    <string name="tab_income">Income</string>
-    <string name="tab_expenses">Expenses</string>
     <string name="tab_goals">Goals</string>
+    <string name="tab_trends">Trends</string>
     <string name="fab_entry">Entry</string>
     <string name="fab_goal">Goal</string>
 
@@ -136,7 +135,7 @@
     <string name="goal_history_covered_unknown">Used to cover spending</string>
     <string name="goal_history_adjusted">Corrected after an entry changed</string>
 
-    <!-- Income and expenses tabs -->
+    <!-- Trends tab -->
     <string name="breakdown_range_title">Summary date range</string>
     <string name="breakdown_preset_this_month">This month</string>
     <string name="breakdown_preset_last_month">Last month</string>
@@ -147,12 +146,12 @@
     <string name="breakdown_range_beginning">Beginning</string>
     <string name="breakdown_range_today">Today</string>
     <string name="breakdown_range">%1$s – %2$s</string>
-    <string name="breakdown_income_all_recorded">All recorded income</string>
-    <string name="breakdown_income_total">Total income</string>
-    <string name="breakdown_income_empty">No income</string>
-    <string name="breakdown_expenses_all_recorded">All recorded expenses</string>
-    <string name="breakdown_expenses_total">Total expenses</string>
-    <string name="breakdown_expenses_empty">No expenses</string>
+    <string name="breakdown_all_recorded">Everything recorded</string>
+    <string name="trends_income">Income</string>
+    <string name="trends_expenses">Expenses</string>
+    <string name="cd_stacked_bar">%1$s: %2$s in total</string>
+    <string name="cd_stacked_bar_parts">%1$s: %2$s in total. %3$s</string>
+    <string name="cd_stacked_bar_part">%1$s %2$s</string>
     <string name="chart_legend_empty">No entries in this date range yet.</string>
     <string name="chart_legend_item">%1$s (%2$d%%)</string>
     <string name="chart_legend_tap_hint">Tap a category to hide or show it</string>

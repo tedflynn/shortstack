@@ -1,6 +1,5 @@
 package com.vivificavit.shortstack.ui.screens
 
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -39,34 +38,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.data.local.CategorySum
-import com.vivificavit.shortstack.ui.components.CategoryDonutChart
 import com.vivificavit.shortstack.ui.components.CategoryLegend
+import com.vivificavit.shortstack.ui.components.StackedBar
+import com.vivificavit.shortstack.ui.components.StackedBars
 import com.vivificavit.shortstack.ui.components.categoryColor
 import com.vivificavit.shortstack.util.DateRanges
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-
-/** Which side of the ledger a breakdown tab shows, with its labels. */
-enum class BreakdownKind(
-    @StringRes val allRecordedRes: Int,
-    @StringRes val totalRes: Int,
-    @StringRes val emptyRes: Int
-) {
-    INCOME(
-        allRecordedRes = R.string.breakdown_income_all_recorded,
-        totalRes = R.string.breakdown_income_total,
-        emptyRes = R.string.breakdown_income_empty
-    ),
-    EXPENSES(
-        allRecordedRes = R.string.breakdown_expenses_all_recorded,
-        totalRes = R.string.breakdown_expenses_total,
-        emptyRes = R.string.breakdown_expenses_empty
-    )
-}
 
 private val PresetLabels = mapOf(
     DateRanges.Preset.THIS_MONTH to R.string.breakdown_preset_this_month,
@@ -75,11 +58,12 @@ private val PresetLabels = mapOf(
     DateRanges.Preset.ALL_TIME to R.string.breakdown_preset_all_time
 )
 
+/** Income and expenses side by side for a date range, each split by category. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun CategoryBreakdownTabContent(
-    kind: BreakdownKind,
-    allSums: List<CategorySum>,
+fun TrendsTabContent(
+    incomeSums: List<CategorySum>,
+    spendingSums: List<CategorySum>,
     hiddenCategories: Set<String>,
     onToggleCategory: (String) -> Unit,
     allCategories: List<String>,
@@ -92,8 +76,14 @@ fun CategoryBreakdownTabContent(
     var pickingEndDate by rememberSaveable { mutableStateOf(false) }
 
     val colorFor = remember(allCategories) { { category: String -> categoryColor(category, allCategories) } }
-    val shownSums = remember(allSums, hiddenCategories) {
-        allSums.filter { it.category.lowercase() !in hiddenCategories }
+    val isShown = { sum: CategorySum -> sum.category.lowercase() !in hiddenCategories }
+    val incomeLabel = stringResource(R.string.trends_income)
+    val expensesLabel = stringResource(R.string.trends_expenses)
+    val bars = remember(incomeSums, spendingSums, hiddenCategories, incomeLabel, expensesLabel) {
+        listOf(
+            StackedBar(incomeLabel, incomeSums.filter(isShown)),
+            StackedBar(expensesLabel, spendingSums.filter(isShown))
+        )
     }
     val today = remember { LocalDate.now() }
 
@@ -181,7 +171,7 @@ fun CategoryBreakdownTabContent(
             }
         }
 
-        item(key = "donut_chart_card") {
+        item(key = "trends_chart_card") {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -197,26 +187,37 @@ fun CategoryBreakdownTabContent(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = dateRangeSubtitle(startDateMillis, endDateMillis, kind),
+                        text = dateRangeSubtitle(startDateMillis, endDateMillis),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    CategoryDonutChart(
-                        categorySpending = shownSums,
-                        colorFor = colorFor,
-                        totalLabel = stringResource(kind.totalRes),
-                        emptyLabel = stringResource(kind.emptyRes),
-                        chartSize = 156.dp,
-                        strokeWidth = 22.dp
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    CategoryLegend(
-                        allSums = allSums,
-                        hiddenCategories = hiddenCategories,
-                        onToggleCategory = onToggleCategory,
-                        colorFor = colorFor
-                    )
+                    StackedBars(bars = bars, colorFor = colorFor)
+                    Spacer(modifier = Modifier.height(20.dp))
+                    if (incomeSums.isEmpty() && spendingSums.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.chart_legend_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        CategoryLegend(
+                            incomeSums = incomeSums,
+                            spendingSums = spendingSums,
+                            hiddenCategories = hiddenCategories,
+                            onToggleCategory = onToggleCategory,
+                            colorFor = colorFor
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.chart_legend_tap_hint),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         }
@@ -280,11 +281,10 @@ private fun formatPickerDate(pickerUtcMillis: Long): String =
 @Composable
 private fun dateRangeSubtitle(
     startDateMillis: Long?,
-    endDateMillis: Long?,
-    kind: BreakdownKind
+    endDateMillis: Long?
 ): String {
     if (startDateMillis == null && endDateMillis == null) {
-        return stringResource(kind.allRecordedRes)
+        return stringResource(R.string.breakdown_all_recorded)
     }
     val startText = startDateMillis?.let(::formatPickerDate) ?: stringResource(R.string.breakdown_range_beginning)
     val endText = endDateMillis?.let(::formatPickerDate) ?: stringResource(R.string.breakdown_range_today)

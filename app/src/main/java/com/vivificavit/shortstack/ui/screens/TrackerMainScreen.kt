@@ -86,9 +86,8 @@ import kotlinx.coroutines.launch
 
 enum class TrackerTab(@StringRes val titleRes: Int) {
     RUNNING_TALLY(R.string.tab_ledger),
-    INCOME(R.string.tab_income),
-    EXPENSES(R.string.tab_expenses),
-    GOALS(R.string.tab_goals)
+    GOALS(R.string.tab_goals),
+    TRENDS(R.string.tab_trends)
 }
 
 /** Machine-readable, so the backup file name sorts by date in any locale. */
@@ -450,26 +449,10 @@ fun TrackerMainScreen(
                 )
             }
 
-            TrackerTab.INCOME -> {
-                CategoryBreakdownTabContent(
-                    kind = BreakdownKind.INCOME,
-                    allSums = incomeSums,
-                    hiddenCategories = hiddenCategories,
-                    onToggleCategory = viewModel::toggleCategorySelection,
-                    allCategories = categories,
-                    startDateMillis = startDateMillis,
-                    endDateMillis = endDateMillis,
-                    onDateRangeSelected = viewModel::setDateRange,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                )
-            }
-
-            TrackerTab.EXPENSES -> {
-                CategoryBreakdownTabContent(
-                    kind = BreakdownKind.EXPENSES,
-                    allSums = spendingSums,
+            TrackerTab.TRENDS -> {
+                TrendsTabContent(
+                    incomeSums = incomeSums,
+                    spendingSums = spendingSums,
                     hiddenCategories = hiddenCategories,
                     onToggleCategory = viewModel::toggleCategorySelection,
                     allCategories = categories,
