@@ -15,6 +15,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,6 +35,8 @@ import com.vivificavit.shortstack.ui.components.StackedBar
 import com.vivificavit.shortstack.ui.components.StackedBars
 import com.vivificavit.shortstack.ui.components.categoryColor
 import com.vivificavit.shortstack.util.BalancePoint
+import com.vivificavit.shortstack.util.DateRanges
+import java.time.LocalDate
 
 /** Income and expenses side by side for a date range, each split by category. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,9 +134,17 @@ fun TrendsTabContent(
     }
 }
 
+private val QuickRangeLabels = listOf(
+    DateRanges.QuickRange.LAST_WEEK to R.string.quick_last_week,
+    DateRanges.QuickRange.LAST_MONTH to R.string.quick_last_month,
+    DateRanges.QuickRange.LAST_YEAR to R.string.quick_last_year,
+    DateRanges.QuickRange.ALL_TIME to R.string.quick_all_time
+)
+
 /**
- * Picks the Trends date range in one calendar: tap a start day, then an end day.
- * Apply with only a start shows from then until today; Clear goes back to everything.
+ * Picks the Trends date range. A quick pick above the calendar applies right
+ * away; otherwise tap a start day, then an end day. Apply with only a start
+ * shows from then until today; Clear goes back to everything.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -165,9 +176,42 @@ fun TrendsDateRangeDialog(
             }
         }
     ) {
+        val today = remember { LocalDate.now() }
         DateRangePicker(
             state = pickerState,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            // The quick picks sit in the calendar's header, under its usual title.
+            title = {
+                Column(
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.date_range_title),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    // Two even rows of two, so no chip is left on a row of its own.
+                    QuickRangeLabels.chunked(2).forEach { pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            pair.forEach { (quick, label) ->
+                                val range = DateRanges.quickRange(quick, today)
+                                FilterChip(
+                                    selected = range == (startDateMillis to endDateMillis),
+                                    onClick = { onApply(range.first, range.second) },
+                                    label = {
+                                        Text(
+                                            text = stringResource(label),
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         )
     }
 }

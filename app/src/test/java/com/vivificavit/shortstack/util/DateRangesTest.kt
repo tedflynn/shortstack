@@ -54,4 +54,20 @@ class DateRangesTest {
         )
         assertEquals(LocalDate.of(2026, 10, 2), DateRanges.timestampToLocalDate(moved, pacific))
     }
+
+    @Test
+    fun quickRangesCountBackFromTodayIncludingIt() {
+        val today = LocalDate.of(2026, 11, 9)
+        fun range(quick: DateRanges.QuickRange, on: LocalDate = today) = DateRanges.quickRange(quick, on)
+        assertEquals(pickerMillis(LocalDate.of(2026, 11, 3)) to pickerMillis(today), range(DateRanges.QuickRange.LAST_WEEK))
+        assertEquals(pickerMillis(LocalDate.of(2026, 10, 11)) to pickerMillis(today), range(DateRanges.QuickRange.LAST_MONTH))
+        assertEquals(pickerMillis(LocalDate.of(2025, 11, 10)) to pickerMillis(today), range(DateRanges.QuickRange.LAST_YEAR))
+        assertEquals(null to null, range(DateRanges.QuickRange.ALL_TIME))
+        // Across a 29 February, the year back is 366 days.
+        val afterLeapDay = LocalDate.of(2028, 3, 1)
+        assertEquals(
+            pickerMillis(LocalDate.of(2027, 3, 2)) to pickerMillis(afterLeapDay),
+            range(DateRanges.QuickRange.LAST_YEAR, afterLeapDay)
+        )
+    }
 }
