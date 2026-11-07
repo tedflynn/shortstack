@@ -53,7 +53,6 @@ import java.time.format.FormatStyle
 
 private val PresetLabels = mapOf(
     DateRanges.Preset.THIS_MONTH to R.string.breakdown_preset_this_month,
-    DateRanges.Preset.LAST_MONTH to R.string.breakdown_preset_last_month,
     DateRanges.Preset.THIS_YEAR to R.string.breakdown_preset_this_year,
     DateRanges.Preset.ALL_TIME to R.string.breakdown_preset_all_time
 )

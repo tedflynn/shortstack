@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,7 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,52 +61,46 @@ fun categoryColor(category: String, allCategories: List<String>): Color {
     return CategoryPalette.getOrNull(index) ?: OtherCategoryColor
 }
 
-/** One column of [StackedBars]: its label and the categories stacked in it, largest first. */
+/** One bar of [StackedBars]: its label and the categories in it, largest first. */
 data class StackedBar(val label: String, val parts: List<CategorySum>)
 
-/** Square at the baseline, rounded at the top. */
-private val BarShape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+/** Square at the start, rounded at the end where the bar stops. */
+private val BarShape = RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp)
 
 /**
- * Columns side by side on one shared scale, so the taller one is the bigger
- * total. Each is split into its categories, largest at the bottom, with its
- * total on top and its label under the baseline.
+ * Bars stacked one above the other on one shared scale, so the longer one is
+ * the bigger total, whatever the amounts; the chart's height never changes. Each
+ * bar is split into its categories, largest first, with its label and total above it.
  */
 @Composable
 fun StackedBars(
     bars: List<StackedBar>,
     colorFor: (String) -> Color,
     modifier: Modifier = Modifier,
-    plotHeight: Dp = 200.dp,
-    barWidth: Dp = 40.dp
+    barHeight: Dp = 28.dp
 ) {
     val maxTotal = bars.maxOfOrNull { bar -> bar.parts.sumOf { it.totalCents } }?.coerceAtLeast(1L) ?: 1L
-    // Bottom-aligned, so the bars share a baseline even when a total's text is taller.
-    Row(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Bottom
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         bars.forEach { bar ->
-            StackedColumn(
+            StackedRow(
                 bar = bar,
                 maxTotal = maxTotal,
                 colorFor = colorFor,
-                plotHeight = plotHeight,
-                barWidth = barWidth,
-                modifier = Modifier.weight(1f)
+                barHeight = barHeight
             )
         }
     }
 }
 
 @Composable
-private fun StackedColumn(
+private fun StackedRow(
     bar: StackedBar,
     maxTotal: Long,
     colorFor: (String) -> Color,
-    plotHeight: Dp,
-    barWidth: Dp,
-    modifier: Modifier = Modifier
+    barHeight: Dp
 ) {
     val resources = LocalResources.current
     val parts = bar.parts.filter { it.totalCents > 0L }
@@ -122,58 +116,68 @@ private fun StackedColumn(
         )
     }
 
-    // Grows from the baseline on first show, then eases to each new total.
-    val heightFraction = remember { Animatable(0f) }
+    // Grows from the start on first show, then eases to each new total.
+    val lengthFraction = remember { Animatable(0f) }
     LaunchedEffect(total, maxTotal) {
-        heightFraction.animateTo(
+        lengthFraction.animateTo(
             targetValue = total.toFloat() / maxTotal,
             animationSpec = tween(durationMillis = 750, easing = FastOutSlowInEasing)
         )
     }
 
     Column(
-        modifier = modifier.clearAndSetSemantics { contentDescription = description },
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics { contentDescription = description },
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(
-            text = Money.format(total),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Canvas(
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = bar.label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = Money.format(total),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        // The full-width track is the shared scale: the bigger total fills it.
+        Box(
             modifier = Modifier
-                .width(barWidth)
-                .height(plotHeight * heightFraction.value)
+                .fillMaxWidth()
+                .height(barHeight)
                 .clip(BarShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
         ) {
-            if (total <= 0L) return@Canvas
-            // A 2dp gap between segments lets the card show through, unless the bar is too short for gaps.
-            val gap = 2.dp.toPx()
-            val gaps = gap * (parts.size - 1)
-            val withGaps = size.height > gaps + parts.size
-            val usable = if (withGaps) size.height - gaps else size.height
-            var bottom = size.height
-            parts.forEach { part ->
-                val segment = usable * part.totalCents / total
-                drawRect(
-                    color = colorFor(part.category),
-                    topLeft = Offset(0f, bottom - segment),
-                    size = Size(size.width, segment)
-                )
-                bottom -= segment + if (withGaps) gap else 0f
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth(lengthFraction.value)
+                    .fillMaxHeight()
+                    .clip(BarShape)
+            ) {
+                if (total <= 0L) return@Canvas
+                // A 2dp gap between segments lets the card show through, unless the bar is too short for gaps.
+                val gap = 2.dp.toPx()
+                val gaps = gap * (parts.size - 1)
+                val withGaps = size.width > gaps + parts.size
+                val usable = if (withGaps) size.width - gaps else size.width
+                var start = 0f
+                parts.forEach { part ->
+                    val segment = usable * part.totalCents / total
+                    drawRect(
+                        color = colorFor(part.category),
+                        topLeft = Offset(start, 0f),
+                        size = Size(segment, size.height)
+                    )
+                    start += segment + if (withGaps) gap else 0f
+                }
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = bar.label,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
     }
 }
 

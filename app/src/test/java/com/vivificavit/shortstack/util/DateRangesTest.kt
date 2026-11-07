@@ -52,14 +52,6 @@ class DateRangesTest {
             DateRanges.presetRange(DateRanges.Preset.THIS_MONTH, today)
         )
         assertEquals(
-            pickerMillis(LocalDate.of(2026, 2, 1)) to pickerMillis(LocalDate.of(2026, 2, 28)),
-            DateRanges.presetRange(DateRanges.Preset.LAST_MONTH, today)
-        )
-        assertEquals(
-            pickerMillis(LocalDate.of(2025, 12, 1)) to pickerMillis(LocalDate.of(2025, 12, 31)),
-            DateRanges.presetRange(DateRanges.Preset.LAST_MONTH, LocalDate.of(2026, 1, 10))
-        )
-        assertEquals(
             pickerMillis(LocalDate.of(2026, 1, 1)) to null,
             DateRanges.presetRange(DateRanges.Preset.THIS_YEAR, today)
         )

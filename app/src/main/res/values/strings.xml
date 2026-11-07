@@ -146,7 +146,6 @@
     <!-- Trends tab -->
     <string name="breakdown_range_title">Summary date range</string>
     <string name="breakdown_preset_this_month">This month</string>
-    <string name="breakdown_preset_last_month">Last month</string>
     <string name="breakdown_preset_this_year">This year</string>
     <string name="breakdown_preset_all_time">All time</string>
     <string name="breakdown_start_date">Start date</string>
