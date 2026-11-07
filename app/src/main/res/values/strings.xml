@@ -144,7 +144,6 @@
     <string name="goal_history_adjusted">Corrected after an entry changed</string>
 
     <!-- Trends tab -->
-    <string name="breakdown_range_title">Spending summary</string>
     <string name="breakdown_start_date">Start date</string>
     <string name="breakdown_end_date">End date</string>
     <string name="chart_total_balance">Total balance</string>
