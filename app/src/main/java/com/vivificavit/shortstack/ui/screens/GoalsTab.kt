@@ -58,6 +58,7 @@ import com.vivificavit.shortstack.data.model.Goal
 import com.vivificavit.shortstack.ui.components.GoalActions
 import com.vivificavit.shortstack.ui.components.GoalIcon
 import com.vivificavit.shortstack.ui.components.GoalProgressBar
+import com.vivificavit.shortstack.ui.components.goalSaveMoreText
 import com.vivificavit.shortstack.ui.icons.EntryIcons
 import com.vivificavit.shortstack.ui.theme.CreditGreen
 import com.vivificavit.shortstack.ui.viewmodel.GoalProgress
@@ -256,7 +257,7 @@ private fun GoalCard(progress: GoalProgress, actions: GoalActions) {
                         }
                     } else {
                         Text(
-                            text = stringResource(R.string.goal_save_more, Money.format(progress.remainingCents)),
+                            text = goalSaveMoreText(progress),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f)

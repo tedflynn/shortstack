@@ -93,6 +93,10 @@
     <string name="goal_progress_saved">%1$s of %2$s saved</string>
     <string name="goal_reached">Goal reached!</string>
     <string name="goal_save_more">Save %1$s more to reach your goal!</string>
+    <string name="goal_save_more_weekly">Save %1$s more by %2$s, about %3$s a week</string>
+    <string name="goal_save_more_by">Save %1$s more by %2$s</string>
+    <string name="goal_buy_by_today">Today\'s your buy-by day. %1$s to go.</string>
+    <string name="goal_buy_by_passed">%1$s has passed. %2$s to go.</string>
     <string name="goal_mark_bought">Mark as bought</string>
     <string name="goal_add_short">Add</string>
     <string name="goal_bought_for">Bought for %1$s on %2$s</string>
@@ -109,6 +113,9 @@
     <string name="goal_name_label">What are you saving for?</string>
     <string name="goal_name_hint">New video game, Bike…</string>
     <string name="goal_target_label">It costs ($)</string>
+    <string name="goal_buy_by_label">Buy by (optional)</string>
+    <string name="goal_buy_by_date">Buy by %1$s</string>
+    <string name="cd_clear_buy_by">Remove the buy-by date</string>
     <string name="goal_choose_icon">Choose icon</string>
     <string name="goal_name_error">Please enter what you\'re saving for.</string>
     <string name="goal_icon_title">Goal icon</string>

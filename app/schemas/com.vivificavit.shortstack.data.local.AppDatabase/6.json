@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 6,
-    "identityHash": "f6bb4bd46a3c225f85602906fedc2f81",
+    "identityHash": "cdf8a92b7dc63506ba72248cc7e8d834",
     "entities": [
       {
         "tableName": "transactions",
@@ -141,7 +141,7 @@
       },
       {
         "tableName": "goals",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kidName` TEXT NOT NULL, `name` TEXT NOT NULL, `targetCents` INTEGER NOT NULL, `icon` TEXT, `createdAt` INTEGER NOT NULL, `completedAt` INTEGER)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kidName` TEXT NOT NULL, `name` TEXT NOT NULL, `targetCents` INTEGER NOT NULL, `icon` TEXT, `createdAt` INTEGER NOT NULL, `completedAt` INTEGER, `targetDay` INTEGER)",
         "fields": [
           {
             "fieldPath": "id",
@@ -181,6 +181,11 @@
           {
             "fieldPath": "completedAt",
             "columnName": "completedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "targetDay",
+            "columnName": "targetDay",
             "affinity": "INTEGER"
           }
         ],
@@ -287,7 +292,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f6bb4bd46a3c225f85602906fedc2f81')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cdf8a92b7dc63506ba72248cc7e8d834')"
     ]
   }
 }

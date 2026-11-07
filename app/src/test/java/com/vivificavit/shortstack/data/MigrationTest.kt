@@ -101,7 +101,8 @@ class MigrationTest {
             assertEquals(500L, appDb.transactionDao().getBalanceForKidOnce("Maya"))
             val goals = appDb.goalDao()
             assertEquals(emptyList<Goal>(), goals.getGoalsForKidOnce("Maya"))
-            val goalId = goals.upsertGoal(Goal(kidName = "Maya", name = "Game", targetCents = 7_000))
+            val goalId = goals.upsertGoal(Goal(kidName = "Maya", name = "Game", targetCents = 7_000, targetDay = 20_807))
+            assertEquals(20_807L, goals.getGoal(goalId)?.targetDay)
             goals.insertMoves(
                 listOf(GoalMove(kidName = "Maya", goalId = goalId, amountCents = 200, reason = GoalMoveReason.MANUAL))
             )

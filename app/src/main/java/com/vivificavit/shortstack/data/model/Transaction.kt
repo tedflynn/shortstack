@@ -77,7 +77,9 @@ data class Goal(
     val icon: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     /** When it was bought; null while the kid is still saving. */
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    /** The day the kid wants to buy it by, as LocalDate.toEpochDay(); null for no date. */
+    val targetDay: Long? = null
 ) {
     init {
         require(targetCents > 0L) { "Goal target must always be positive." }

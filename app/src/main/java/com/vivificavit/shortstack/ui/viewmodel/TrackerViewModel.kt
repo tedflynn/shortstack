@@ -396,17 +396,19 @@ class TrackerViewModel(
         }
     }
 
-    fun addGoal(name: String, targetCents: Long, icon: String?) {
+    fun addGoal(name: String, targetCents: Long, icon: String?, targetDay: Long? = null) {
         val trimmed = name.trim()
         if (trimmed.isBlank() || targetCents <= 0L) return
         val currentKid = _selectedKid.value ?: return
         viewModelScope.launch {
-            repository.saveGoal(Goal(kidName = currentKid, name = trimmed, targetCents = targetCents, icon = icon))
+            repository.saveGoal(
+                Goal(kidName = currentKid, name = trimmed, targetCents = targetCents, icon = icon, targetDay = targetDay)
+            )
             emitMessage(R.string.message_goal_added, trimmed)
         }
     }
 
-    /** Saves changes to a goal's name, target or icon. */
+    /** Saves changes to a goal's name, target, icon or buy-by day. */
     fun updateGoal(goal: Goal) {
         viewModelScope.launch { repository.saveGoal(goal) }
     }

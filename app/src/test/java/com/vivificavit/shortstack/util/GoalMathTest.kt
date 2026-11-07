@@ -75,4 +75,19 @@ class GoalMathTest {
             assertEquals(null, it.transactionId)
         }
     }
+
+    @Test
+    fun weeklyAmountRoundsUpAndCountsAPartWeekAsWhole() {
+        // $50 over 15 days is three weeks (two full and one part): $16.67 a week, never short.
+        assertEquals(GoalMath.Pace.Weekly(1_667), GoalMath.pace(5_000, todayDay = 100, targetDay = 115))
+        assertEquals(GoalMath.Pace.Weekly(2_500), GoalMath.pace(5_000, todayDay = 100, targetDay = 114))
+    }
+
+    @Test
+    fun theLastWeekTodayAndAPassedDateHaveTheirOwnWording() {
+        assertEquals(GoalMath.Pace.ThisWeek, GoalMath.pace(5_000, todayDay = 100, targetDay = 107))
+        assertEquals(GoalMath.Pace.ThisWeek, GoalMath.pace(5_000, todayDay = 100, targetDay = 101))
+        assertEquals(GoalMath.Pace.Today, GoalMath.pace(5_000, todayDay = 100, targetDay = 100))
+        assertEquals(GoalMath.Pace.Passed, GoalMath.pace(5_000, todayDay = 100, targetDay = 99))
+    }
 }

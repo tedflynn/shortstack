@@ -98,7 +98,7 @@ class BackupCodecTest {
     @Test
     fun roundTripsGoalsAndTheirMoves() {
         val tx = Transaction(id = 7, kidName = "Sam", title = "Allowance", amountCents = 1_000, type = TransactionType.CREDIT)
-        val goal = Goal(id = 3, kidName = "Sam", name = "Game", targetCents = 7_000, icon = "game", createdAt = 2)
+        val goal = Goal(id = 3, kidName = "Sam", name = "Game", targetCents = 7_000, icon = "game", createdAt = 2, targetDay = 20_807)
         val moves = listOf(
             GoalMove(id = 1, kidName = "Sam", goalId = 3, amountCents = 200, reason = GoalMoveReason.SPLIT, timestamp = 5, transactionId = 7),
             GoalMove(id = 2, kidName = "Sam", goalId = 3, amountCents = -50, reason = GoalMoveReason.MANUAL, timestamp = 6)
@@ -153,6 +153,10 @@ class BackupCodecTest {
         val decoded = BackupCodec.decode("""{"goals":[$goal],"goalMoves":[$linked]}""")
         assertEquals(null, decoded.goalMoves.single().transactionRef)
         assertEquals(listOf("Sam"), decoded.kids.map { it.name })
+
+        // So is a buy-by day outside the dates the app accepts.
+        val farOff = goal.replace("}", ""","targetDay":99999}""")
+        assertEquals(null, BackupCodec.decode("""{"goals":[$farOff]}""").goals.values.single().targetDay)
     }
 
     /** A one-entry backup that's valid unless a field is overridden. */

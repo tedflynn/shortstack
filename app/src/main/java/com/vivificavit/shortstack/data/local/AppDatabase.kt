@@ -80,7 +80,8 @@ abstract class AppDatabase : RoomDatabase() {
                         `targetCents` INTEGER NOT NULL,
                         `icon` TEXT,
                         `createdAt` INTEGER NOT NULL,
-                        `completedAt` INTEGER
+                        `completedAt` INTEGER,
+                        `targetDay` INTEGER
                     )
                     """.trimIndent()
                 )

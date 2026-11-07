@@ -58,7 +58,9 @@ data class BackupGoal(
     val targetCents: Long,
     val icon: String? = null,
     val createdAt: Long = 0L,
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    /** The buy-by day, as LocalDate.toEpochDay(). */
+    val targetDay: Long? = null
 )
 
 @Serializable
@@ -97,6 +99,9 @@ object BackupCodec {
     private const val MAX_TIMESTAMP = 4_102_444_800_000L
 
     private const val MAX_ICON_KEY_LENGTH = 40
+
+    /** The last buy-by day kept from a backup (2099-12-31), matching [MAX_TIMESTAMP]. */
+    private const val MAX_TARGET_DAY = 47_481L
 
     /**
      * Largest single goal move accepted. A purchase or correction can add up many
@@ -142,7 +147,8 @@ object BackupCodec {
                     targetCents = it.targetCents,
                     icon = it.icon,
                     createdAt = it.createdAt,
-                    completedAt = it.completedAt
+                    completedAt = it.completedAt,
+                    targetDay = it.targetDay
                 )
             },
             goalMoves = goalMoves.map {
@@ -220,7 +226,9 @@ object BackupCodec {
                 // Like category icons, a malformed one just falls back to an automatic icon.
                 icon = goal.icon?.takeIf { it.isNotBlank() && it.length <= MAX_ICON_KEY_LENGTH },
                 createdAt = goal.createdAt,
-                completedAt = goal.completedAt
+                completedAt = goal.completedAt,
+                // A buy-by day outside the app's dates is dropped, like a malformed icon.
+                targetDay = goal.targetDay?.takeIf { it in 0..MAX_TARGET_DAY }
             )
         }
         require(goals.map { it.first }.toSet().size == goals.size) { "The backup has two goals with the same id." }

@@ -523,11 +523,13 @@ fun TrackerMainScreen(
             GoalEditDialog(
                 existing = editingGoal,
                 onDismiss = ::closeGoalDialog,
-                onSave = { name, targetCents, icon ->
+                onSave = { name, targetCents, icon, targetDay ->
                     if (editingGoal == null) {
-                        viewModel.addGoal(name, targetCents, icon)
+                        viewModel.addGoal(name, targetCents, icon, targetDay)
                     } else {
-                        viewModel.updateGoal(editingGoal.copy(name = name, targetCents = targetCents, icon = icon))
+                        viewModel.updateGoal(
+                            editingGoal.copy(name = name, targetCents = targetCents, icon = icon, targetDay = targetDay)
+                        )
                     }
                     closeGoalDialog()
                 }

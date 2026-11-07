@@ -20,12 +20,19 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -63,6 +70,11 @@ import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.data.model.Goal
 import com.vivificavit.shortstack.ui.icons.EntryIcons
 import com.vivificavit.shortstack.ui.screens.formatShortDate
+import com.vivificavit.shortstack.util.DateRanges
+import com.vivificavit.shortstack.util.GoalMath
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import com.vivificavit.shortstack.ui.theme.CreditGreen
 import com.vivificavit.shortstack.ui.viewmodel.GoalHistoryItem
 import com.vivificavit.shortstack.ui.viewmodel.GoalProgress
@@ -113,16 +125,19 @@ fun GoalProgressBar(fraction: Float, modifier: Modifier = Modifier) {
 }
 
 /** Adds a goal, or edits [existing]: its name, what it costs and its icon. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GoalEditDialog(
     existing: Goal?,
     onDismiss: () -> Unit,
-    onSave: (name: String, targetCents: Long, icon: String?) -> Unit
+    onSave: (name: String, targetCents: Long, icon: String?, targetDay: Long?) -> Unit
 ) {
     var nameInput by rememberSaveable { mutableStateOf(existing?.name ?: "") }
     var targetInput by rememberSaveable { mutableStateOf(existing?.let { Money.toInput(it.targetCents) } ?: "") }
     var iconKey by rememberSaveable { mutableStateOf(existing?.icon) }
     var pickingIcon by rememberSaveable { mutableStateOf(false) }
+    var targetDay by rememberSaveable { mutableStateOf(existing?.targetDay) }
+    var pickingDate by rememberSaveable { mutableStateOf(false) }
     var inputError by remember { mutableStateOf<Int?>(null) }
 
     fun trySave() {
@@ -130,7 +145,7 @@ fun GoalEditDialog(
         when {
             nameInput.isBlank() -> inputError = R.string.goal_name_error
             cents == null -> inputError = R.string.entry_amount_error
-            else -> onSave(nameInput.trim(), cents, iconKey)
+            else -> onSave(nameInput.trim(), cents, iconKey, targetDay)
         }
     }
 
@@ -185,6 +200,31 @@ fun GoalEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = { pickingDate = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = targetDay?.let { stringResource(R.string.goal_buy_by_date, formatBuyByDate(it)) }
+                                ?: stringResource(R.string.goal_buy_by_label)
+                        )
+                    }
+                    if (targetDay != null) {
+                        IconButton(onClick = { targetDay = null }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.cd_clear_buy_by)
+                            )
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     GoalIcon(EntryIcons.forGoal(nameInput, iconKey))
                     Spacer(modifier = Modifier.width(12.dp))
                     OutlinedButton(onClick = { pickingIcon = true }) {
@@ -211,6 +251,43 @@ fun GoalEditDialog(
             }
         }
     )
+
+    if (pickingDate) {
+        val tomorrow = remember { LocalDate.now().plusDays(1) }
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = targetDay?.let { DateRanges.localDateToPickerMillis(LocalDate.ofEpochDay(it)) },
+            selectableDates = remember(tomorrow) {
+                object : SelectableDates {
+                    override fun isSelectableDate(utcTimeMillis: Long) =
+                        !DateRanges.pickerMillisToLocalDate(utcTimeMillis).isBefore(tomorrow)
+
+                    override fun isSelectableYear(year: Int) = year >= tomorrow.year
+                }
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { pickingDate = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.let {
+                            targetDay = DateRanges.pickerMillisToLocalDate(it).toEpochDay()
+                        }
+                        pickingDate = false
+                    }
+                ) {
+                    Text(stringResource(R.string.action_apply))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pickingDate = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
 
     if (pickingIcon) {
         IconPickerDialog(
@@ -415,7 +492,7 @@ fun GoalDetailSheet(
                     text = if (progress.isReached) {
                         stringResource(R.string.goal_reached)
                     } else {
-                        stringResource(R.string.goal_save_more, Money.format(progress.remainingCents))
+                        goalSaveMoreText(progress)
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (progress.isReached) CreditGreen else MaterialTheme.colorScheme.onSurfaceVariant
@@ -501,5 +578,32 @@ private fun GoalHistoryRow(item: GoalHistoryItem) {
             fontWeight = FontWeight.SemiBold,
             color = if (incoming) CreditGreen else MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+/** "Dec 20, 2026": the buy-by day, written out so it can't be mistaken for another year. */
+internal fun formatBuyByDate(targetDay: Long): String =
+    LocalDate.ofEpochDay(targetDay).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+
+/**
+ * The line under a goal's progress bar while it's still short: how much more to
+ * save, and, with a buy-by day, by when and about how much a week.
+ */
+@Composable
+internal fun goalSaveMoreText(progress: GoalProgress): String {
+    val remaining = Money.format(progress.remainingCents)
+    val targetDay = progress.goal.targetDay ?: return stringResource(R.string.goal_save_more, remaining)
+    val today = remember { LocalDate.now().toEpochDay() }
+    return when (val pace = GoalMath.pace(progress.remainingCents, today, targetDay)) {
+        is GoalMath.Pace.Weekly -> stringResource(
+            R.string.goal_save_more_weekly, remaining, formatBuyByDate(targetDay), Money.format(pace.cents)
+        )
+        GoalMath.Pace.ThisWeek -> stringResource(
+            R.string.goal_save_more_by,
+            remaining,
+            LocalDate.ofEpochDay(targetDay).format(DateTimeFormatter.ofPattern("EEEE"))
+        )
+        GoalMath.Pace.Today -> stringResource(R.string.goal_buy_by_today, remaining)
+        GoalMath.Pace.Passed -> stringResource(R.string.goal_buy_by_passed, formatBuyByDate(targetDay), remaining)
     }
 }

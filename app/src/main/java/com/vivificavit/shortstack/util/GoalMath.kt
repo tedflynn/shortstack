@@ -25,6 +25,36 @@ object GoalMath {
     fun remainingCents(goal: Goal, savedCents: Long): Long =
         (goal.targetCents - savedCents).coerceAtLeast(0L)
 
+    /** Where a goal with a buy-by day stands, for the line under its progress bar. */
+    sealed interface Pace {
+        /** More than a week to go: save about [cents] a week. */
+        data class Weekly(val cents: Long) : Pace
+        /** The buy-by day is 1 to 7 days away. */
+        data object ThisWeek : Pace
+        data object Today : Pace
+        data object Passed : Pace
+    }
+
+    /**
+     * How [remainingCents] fits between [todayDay] and [targetDay] (both
+     * LocalDate.toEpochDay()). Worked out from today each time, so a big gift
+     * lowers the weekly amount right away and a quiet stretch raises it; it
+     * never has to guess at future income.
+     */
+    fun pace(remainingCents: Long, todayDay: Long, targetDay: Long): Pace {
+        val daysLeft = targetDay - todayDay
+        return when {
+            daysLeft < 0L -> Pace.Passed
+            daysLeft == 0L -> Pace.Today
+            daysLeft <= 7L -> Pace.ThisWeek
+            else -> {
+                // A part week counts as a whole one, and the amount rounds up so it never falls short.
+                val weeks = (daysLeft + 6L) / 7L
+                Pace.Weekly((remainingCents + weeks - 1L) / weeks)
+            }
+        }
+    }
+
     /** [percent] of [amountCents], rounded down to the cent so a split never exceeds the entry. */
     fun splitCents(amountCents: Long, percent: Int): Long = amountCents * percent / 100
 
