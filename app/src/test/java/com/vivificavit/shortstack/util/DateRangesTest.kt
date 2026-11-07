@@ -45,28 +45,6 @@ class DateRangesTest {
     }
 
     @Test
-    fun presetsCoverTheExpectedDays() {
-        val today = LocalDate.of(2026, 3, 15)
-        assertEquals(
-            pickerMillis(LocalDate.of(2026, 3, 1)) to null,
-            DateRanges.presetRange(DateRanges.Preset.THIS_MONTH, today)
-        )
-        assertEquals(
-            pickerMillis(LocalDate.of(2026, 2, 1)) to pickerMillis(LocalDate.of(2026, 2, 28)),
-            DateRanges.presetRange(DateRanges.Preset.LAST_MONTH, today)
-        )
-        assertEquals(
-            pickerMillis(LocalDate.of(2025, 12, 1)) to pickerMillis(LocalDate.of(2025, 12, 31)),
-            DateRanges.presetRange(DateRanges.Preset.LAST_MONTH, LocalDate.of(2026, 1, 10))
-        )
-        assertEquals(
-            pickerMillis(LocalDate.of(2026, 1, 1)) to null,
-            DateRanges.presetRange(DateRanges.Preset.THIS_YEAR, today)
-        )
-        assertEquals(null to null, DateRanges.presetRange(DateRanges.Preset.ALL_TIME, today))
-    }
-
-    @Test
     fun movingToAnotherDayKeepsTimeOfDay() {
         val evening = ZonedDateTime.of(2026, 10, 30, 19, 45, 0, 0, pacific).toInstant().toEpochMilli()
         val moved = DateRanges.moveToDate(evening, LocalDate.of(2026, 10, 2), pacific)

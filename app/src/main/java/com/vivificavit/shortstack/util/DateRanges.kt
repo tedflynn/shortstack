@@ -28,20 +28,6 @@ object DateRanges {
     }
 
     /** Quick choices for the chart date range. */
-    enum class Preset { THIS_MONTH, LAST_MONTH, THIS_YEAR, ALL_TIME }
-
-    /** The picker start/end values for [preset]; a null end means "up to today". */
-    fun presetRange(preset: Preset, today: LocalDate): Pair<Long?, Long?> = when (preset) {
-        Preset.THIS_MONTH -> localDateToPickerMillis(today.withDayOfMonth(1)) to null
-        Preset.LAST_MONTH -> {
-            val firstOfLastMonth = today.withDayOfMonth(1).minusMonths(1)
-            localDateToPickerMillis(firstOfLastMonth) to
-                localDateToPickerMillis(firstOfLastMonth.plusMonths(1).minusDays(1))
-        }
-        Preset.THIS_YEAR -> localDateToPickerMillis(today.withDayOfYear(1)) to null
-        Preset.ALL_TIME -> null to null
-    }
-
     /**
      * Turns the picker's start/end selections into an inclusive range of
      * epoch millis covering whole local days. Missing ends are open-ended,
