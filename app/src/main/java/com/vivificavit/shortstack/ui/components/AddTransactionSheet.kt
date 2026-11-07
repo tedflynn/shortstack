@@ -1,5 +1,6 @@
 package com.vivificavit.shortstack.ui.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -65,8 +66,10 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.vivificavit.shortstack.R
+import com.vivificavit.shortstack.data.model.Frequency
 import com.vivificavit.shortstack.data.model.GoalMoveReason
 import com.vivificavit.shortstack.data.model.GoalSplit
+import com.vivificavit.shortstack.data.model.RecurringEntry
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.ui.theme.CreditContainer
@@ -95,7 +98,9 @@ data class EntryDraft(
     /** Income set aside for a goal. */
     val split: GoalSplit? = null,
     /** For spending more than pocket money: the goal to take the rest from first. */
-    val coverGoalId: Long? = null
+    val coverGoalId: Long? = null,
+    /** How often it repeats; null for a one-off entry. */
+    val repeat: Frequency? = null
 )
 
 /**
@@ -148,6 +153,22 @@ data class EntryMoney(
 /** What an income entry set aside for a goal that's since been bought. */
 data class LockedSplit(val goalName: String, val amountCents: Long)
 
+/** The Repeat choices, with null for an entry that doesn't repeat. */
+private val RepeatChoices = listOf(
+    null to R.string.repeat_never,
+    Frequency.WEEKLY to R.string.repeat_weekly,
+    Frequency.EVERY_2_WEEKS to R.string.repeat_every_2_weeks,
+    Frequency.MONTHLY to R.string.repeat_monthly
+)
+
+/** How often [frequency] repeats, in words, for notes like "Repeats every week". */
+@StringRes
+fun repeatsRes(frequency: Frequency): Int = when (frequency) {
+    Frequency.WEEKLY -> R.string.repeats_weekly
+    Frequency.EVERY_2_WEEKS -> R.string.repeats_every_2_weeks
+    Frequency.MONTHLY -> R.string.repeats_monthly
+}
+
 /** Quick picks for how much of an income entry to set aside. */
 private val SplitPercents = listOf(10, 20, 50, 100)
 
@@ -155,7 +176,9 @@ private val SplitPercents = listOf(10, 20, 50, 100)
  * Adds a new entry, or edits [existing] when it's given (which also offers Delete).
  * With [money], income can set some aside for a goal, and spending more than
  * pocket money says which goal pays the rest. With [buyingGoal], it records
- * buying that goal. [onSave] gets the entry; the caller decides what to do with it.
+ * buying that goal. A new entry can repeat; [schedule] edits a repeating entry
+ * instead, and [existingRepeat] says how often the schedule [existing] came from
+ * repeats. [onSave] gets the entry; the caller decides what to do with it.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -169,36 +192,48 @@ fun EntryBottomSheet(
     onDismiss: () -> Unit,
     onAddCategory: (String) -> Unit,
     onSave: (EntryDraft) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    schedule: RecurringEntry? = null,
+    existingRepeat: Frequency? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val today = remember { LocalDate.now() }
-    val initialType = existing?.type ?: if (buyingGoal != null) TransactionType.DEBIT else TransactionType.CREDIT
+    val initialType = existing?.type ?: schedule?.type
+        ?: if (buyingGoal != null) TransactionType.DEBIT else TransactionType.CREDIT
     var selectedType by rememberSaveable { mutableStateOf(initialType) }
     // Suggest the last category used for this type, if it still exists.
     fun suggestedCategory(type: TransactionType): String? =
         lastCategoryByType[type]?.takeIf { it in categories }
     var selectedCategory by rememberSaveable {
-        mutableStateOf(existing?.category ?: suggestedCategory(initialType))
+        mutableStateOf(existing?.category ?: schedule?.category ?: suggestedCategory(initialType))
     }
     // Once the user picks a category (or is editing one), switching type no longer replaces it.
-    var categoryChosenByUser by rememberSaveable { mutableStateOf(existing != null) }
+    var categoryChosenByUser by rememberSaveable { mutableStateOf(existing != null || schedule != null) }
     var amountInput by rememberSaveable {
         mutableStateOf(
-            existing?.let { Money.toInput(it.amountCents) }
+            (existing?.amountCents ?: schedule?.amountCents)?.let { Money.toInput(it) }
                 ?: buyingGoal?.let { Money.toInput(it.goal.targetCents) }
                 ?: ""
         )
     }
-    var noteInput by rememberSaveable { mutableStateOf(existing?.title ?: buyingGoal?.goal?.name ?: "") }
+    var noteInput by rememberSaveable {
+        mutableStateOf(existing?.title ?: schedule?.title ?: buyingGoal?.goal?.name ?: "")
+    }
+    // A new entry can repeat; a schedule being edited always does.
+    val repeatShown = existing == null && buyingGoal == null
+    var repeat by rememberSaveable { mutableStateOf(schedule?.frequency) }
 
     // Setting part of an income entry aside for one goal.
     val openGoals = money?.goals.orEmpty()
-    var splitOn by rememberSaveable { mutableStateOf(money?.existingSplit != null) }
+    // A schedule's fixed set-aside, while its goal is still being saved for.
+    val scheduleSplit = schedule?.goalId?.takeIf { id -> openGoals.any { it.goal.id == id } }
+        ?.let { id -> schedule.goalCents?.let { GoalSplit(id, it) } }
+    val initialSplit = money?.existingSplit ?: scheduleSplit
+    var splitOn by rememberSaveable { mutableStateOf(initialSplit != null) }
     var splitGoalId by rememberSaveable {
-        mutableStateOf(money?.existingSplit?.goalId ?: openGoals.firstOrNull()?.goal?.id)
+        mutableStateOf(initialSplit?.goalId ?: openGoals.firstOrNull()?.goal?.id)
     }
-    var splitInput by rememberSaveable { mutableStateOf(money?.existingSplit?.let { Money.toInput(it.amountCents) } ?: "") }
+    var splitInput by rememberSaveable { mutableStateOf(initialSplit?.let { Money.toInput(it.amountCents) } ?: "") }
     // Which goal pays first when spending is more than pocket money; null until the kid picks one.
     var coverGoalChoice by rememberSaveable { mutableStateOf<Long?>(null) }
     val goalsWithMoney = openGoals.filter { it.savedCents > 0L }
@@ -236,7 +271,8 @@ fun EntryBottomSheet(
                         category = category,
                         timestamp = timestamp,
                         split = if (splitting && splitCents != null) GoalSplit(splitGoalId!!, splitCents) else null,
-                        coverGoalId = coverGoalId.takeIf { selectedType == TransactionType.DEBIT }
+                        coverGoalId = coverGoalId.takeIf { selectedType == TransactionType.DEBIT },
+                        repeat = repeat.takeIf { repeatShown }
                     )
                 )
             }
@@ -245,7 +281,7 @@ fun EntryBottomSheet(
 
     // A new entry opens with the cursor in Amount and the number keyboard up.
     val amountFocus = remember { FocusRequester() }
-    if (existing == null) {
+    if (existing == null && schedule == null) {
         LaunchedEffect(Unit) { amountFocus.requestFocus() }
     }
 
@@ -265,6 +301,7 @@ fun EntryBottomSheet(
             Text(
                 text = when {
                     buyingGoal != null -> stringResource(R.string.entry_buy_title, buyingGoal.goal.name)
+                    schedule != null -> stringResource(R.string.recurring_edit_title, kidName)
                     existing == null -> stringResource(R.string.entry_title, kidName)
                     else -> stringResource(R.string.entry_edit_title, kidName)
                 },
@@ -406,7 +443,24 @@ fun EntryBottomSheet(
                 }
             }
 
-            OutlinedButton(
+            if (repeatShown) {
+                RepeatRow(
+                    repeat = repeat,
+                    // A schedule being edited stops from the Repeating entries list, not here.
+                    allowNever = schedule == null,
+                    onPick = { repeat = it }
+                )
+            }
+            existingRepeat?.let { frequency ->
+                Text(
+                    text = stringResource(R.string.entry_from_schedule, stringResource(repeatsRes(frequency))),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // A schedule keeps its start date; edits apply from the next entry on.
+            if (schedule == null) OutlinedButton(
                 onClick = { pickingDate = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -418,7 +472,7 @@ fun EntryBottomSheet(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = stringResource(
-                        R.string.entry_date,
+                        if (repeat != null) R.string.entry_date_first else R.string.entry_date,
                         if (entryDate == today) {
                             stringResource(R.string.entry_date_today)
                         } else {
@@ -784,6 +838,31 @@ private fun PurchaseSummary(goal: GoalProgress, priceCents: Long?) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+/** How often a new entry repeats: Never, Weekly, Every 2 weeks or Monthly. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RepeatRow(repeat: Frequency?, allowNever: Boolean, onPick: (Frequency?) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.repeat_label),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            RepeatChoices.filter { (frequency, _) -> allowNever || frequency != null }.forEach { (frequency, label) ->
+                FilterChip(
+                    selected = repeat == frequency,
+                    onClick = { onPick(frequency) },
+                    label = { Text(stringResource(label)) }
+                )
+            }
         }
     }
 }

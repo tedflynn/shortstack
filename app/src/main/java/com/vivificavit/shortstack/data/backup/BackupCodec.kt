@@ -1,10 +1,12 @@
 package com.vivificavit.shortstack.data.backup
 
 import com.vivificavit.shortstack.data.model.DefaultCategories
+import com.vivificavit.shortstack.data.model.Frequency
 import com.vivificavit.shortstack.data.model.Goal
 import com.vivificavit.shortstack.data.model.GoalMove
 import com.vivificavit.shortstack.data.model.GoalMoveReason
 import com.vivificavit.shortstack.data.model.KidProfile
+import com.vivificavit.shortstack.data.model.RecurringEntry
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.util.Money
@@ -25,7 +27,9 @@ data class BackupFile(
     /** Present in format version 3+. */
     val goals: List<BackupGoal> = emptyList(),
     /** Present in format version 3+. */
-    val goalMoves: List<BackupGoalMove> = emptyList()
+    val goalMoves: List<BackupGoalMove> = emptyList(),
+    /** Present in format version 4+. */
+    val recurring: List<BackupRecurring> = emptyList()
 )
 
 @Serializable
@@ -46,7 +50,9 @@ data class BackupTransaction(
     val category: String = DefaultCategories.DEFAULT_CATEGORIES.first(),
     val timestamp: Long,
     /** The entry's id when it was backed up, so goal moves can point to it. Format version 3+. */
-    val ref: Long? = null
+    val ref: Long? = null,
+    /** The repeating entry that added it. Format version 4+. */
+    val recurringRef: Long? = null
 )
 
 @Serializable
@@ -72,6 +78,23 @@ data class BackupGoalMove(
     val transactionRef: Long? = null
 )
 
+@Serializable
+data class BackupRecurring(
+    /** Its id when it was backed up, so entries can point to it. */
+    val ref: Long,
+    val kidName: String,
+    val title: String,
+    val amountCents: Long,
+    val type: TransactionType,
+    val category: String,
+    val frequency: Frequency,
+    val startTimestamp: Long,
+    val occurrences: Int = 0,
+    val goalRef: Long? = null,
+    val goalCents: Long? = null,
+    val createdAt: Long = 0L
+)
+
 /** Fully validated backup contents, ready to write to the database. */
 data class BackupContents(
     val kids: List<KidProfile>,
@@ -84,16 +107,24 @@ data class BackupContents(
     /** Goals by their ref; their ids are left for the database to assign. */
     val goals: Map<Long, Goal> = emptyMap(),
     /** Moves whose goal and entry are still refs; see [BackupCodec.decode]. */
-    val goalMoves: List<BackupGoalMove> = emptyList()
+    val goalMoves: List<BackupGoalMove> = emptyList(),
+    /** Repeating entries by their ref, with [RecurringEntry.goalId] still a goal ref. */
+    val recurring: Map<Long, RecurringEntry> = emptyMap(),
+    /** The ref of the repeating entry that added each transaction (or null), in the same order. */
+    val transactionRecurringRefs: List<Long?> = emptyList()
 )
 
 /**
  * Format 1 (original): a bare JSON array of transactions with dollar amounts.
  * Format 2: an object with kids, categories and transactions in cents.
  * Format 3: adds goals and the money moved into and out of them.
+ * Format 4: adds repeating entries, and which entries they added.
  */
 object BackupCodec {
-    const val CURRENT_FORMAT_VERSION = 3
+    const val CURRENT_FORMAT_VERSION = 4
+
+    /** More than a weekly entry would add in the app's whole date range; anything above is corrupt. */
+    private const val MAX_OCCURRENCES = 10_000
 
     /** Entries dated after this (2100-01-01 UTC) are treated as corrupt. */
     private const val MAX_TIMESTAMP = 4_102_444_800_000L
@@ -121,7 +152,8 @@ object BackupCodec {
         transactions: List<Transaction>,
         categoryIcons: Map<String, String> = emptyMap(),
         goals: List<Goal> = emptyList(),
-        goalMoves: List<GoalMove> = emptyList()
+        goalMoves: List<GoalMove> = emptyList(),
+        recurring: List<RecurringEntry> = emptyList()
     ): String = json.encodeToString(
         BackupFile.serializer(),
         BackupFile(
@@ -135,7 +167,8 @@ object BackupCodec {
                     type = it.type,
                     category = it.category,
                     timestamp = it.timestamp,
-                    ref = it.id
+                    ref = it.id,
+                    recurringRef = it.recurringId
                 )
             },
             categoryIcons = categoryIcons,
@@ -158,6 +191,22 @@ object BackupCodec {
                     reason = it.reason,
                     timestamp = it.timestamp,
                     transactionRef = it.transactionId
+                )
+            },
+            recurring = recurring.map {
+                BackupRecurring(
+                    ref = it.id,
+                    kidName = it.kidName,
+                    title = it.title,
+                    amountCents = it.amountCents,
+                    type = it.type,
+                    category = it.category,
+                    frequency = it.frequency,
+                    startTimestamp = it.startTimestamp,
+                    occurrences = it.occurrences,
+                    goalRef = it.goalId,
+                    goalCents = it.goalCents,
+                    createdAt = it.createdAt
                 )
             }
         )
@@ -244,12 +293,47 @@ object BackupCodec {
             move.copy(transactionRef = move.transactionRef?.takeIf { it in knownRefs })
         }
 
+        val recurring = file.recurring.mapIndexed { index, entry ->
+            val label = "Repeating entry ${index + 1}"
+            require(entry.kidName.isNotBlank()) { "$label has no kid name." }
+            require(entry.title.isNotBlank()) { "$label has no note." }
+            require(entry.category.isNotBlank()) { "$label has no category." }
+            require(entry.amountCents in 1..Money.MAX_ENTRY_CENTS) {
+                "$label has an amount outside ${Money.format(1L)} to ${Money.format(Money.MAX_ENTRY_CENTS)}."
+            }
+            require(entry.startTimestamp in 0..MAX_TIMESTAMP) { "$label has an invalid date." }
+            require(entry.occurrences in 0..MAX_OCCURRENCES) { "$label has an invalid count." }
+            // A set-aside for a goal that isn't here, or for more than the entry, is dropped.
+            val goalRef = entry.goalRef?.takeIf { it in goalsByRef && entry.type == TransactionType.CREDIT }
+            val goalCents = entry.goalCents?.takeIf { goalRef != null && it in 1..entry.amountCents }
+            entry.ref to RecurringEntry(
+                kidName = entry.kidName.trim(),
+                title = entry.title.trim(),
+                amountCents = entry.amountCents,
+                type = entry.type,
+                category = entry.category.trim(),
+                frequency = entry.frequency,
+                startTimestamp = entry.startTimestamp,
+                occurrences = entry.occurrences,
+                goalId = goalRef.takeIf { goalCents != null },
+                goalCents = goalCents,
+                createdAt = entry.createdAt
+            )
+        }
+        require(recurring.map { it.first }.toSet().size == recurring.size) {
+            "The backup has two repeating entries with the same id."
+        }
+        val recurringByRef = recurring.toMap()
+        val transactionRecurringRefs = file.transactions.map { tx -> tx.recurringRef?.takeIf { it in recurringByRef } }
+
         require(file.kids.none { it.name.isBlank() }) { "The backup has a kid with no name." }
         val kids = (file.kids.map { KidProfile(name = it.name.trim(), createdAt = it.createdAt) } +
             transactions.map { KidProfile(name = it.kidName) } +
-            goalsByRef.values.map { KidProfile(name = it.kidName) })
+            goalsByRef.values.map { KidProfile(name = it.kidName) } +
+            recurringByRef.values.map { KidProfile(name = it.kidName) })
             .distinctBy { it.name }
-        val categories = (file.categories.map { it.trim() } + transactions.map { it.category })
+        val categories = (file.categories.map { it.trim() } + transactions.map { it.category } +
+            recurringByRef.values.map { it.category })
             .filter { it.isNotBlank() }
             .distinct()
         // Icons are cosmetic: one that's malformed is dropped rather than failing the restore,
@@ -264,7 +348,9 @@ object BackupCodec {
             categoryIcons = categoryIcons,
             transactionRefs = transactionRefs,
             goals = goalsByRef,
-            goalMoves = goalMoves
+            goalMoves = goalMoves,
+            recurring = recurringByRef,
+            transactionRecurringRefs = transactionRecurringRefs
         )
     }
 }

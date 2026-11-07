@@ -5,9 +5,12 @@ import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.vivificavit.shortstack.data.local.AppDatabase
+import com.vivificavit.shortstack.data.model.Frequency
 import com.vivificavit.shortstack.data.model.Goal
 import com.vivificavit.shortstack.data.model.GoalMove
 import com.vivificavit.shortstack.data.model.GoalMoveReason
+import com.vivificavit.shortstack.data.model.RecurringEntry
+import com.vivificavit.shortstack.data.model.TransactionType
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -107,6 +110,34 @@ class MigrationTest {
                 listOf(GoalMove(kidName = "Maya", goalId = goalId, amountCents = 200, reason = GoalMoveReason.MANUAL))
             )
             assertEquals(GoalMoveReason.MANUAL, goals.getMovesForGoal(goalId).single().reason)
+        } finally {
+            appDb.close()
+        }
+    }
+
+    @Test
+    fun migrate6To7KeepsEntriesAndStartsWithNothingRepeating() = runTest {
+        createDatabase(6).apply {
+            execSQL("INSERT INTO kids (name, createdAt) VALUES ('Maya', 1)")
+            execSQL(
+                "INSERT INTO transactions (kidName, title, amountCents, type, category, timestamp) " +
+                    "VALUES ('Maya', 'Allowance', 500, 'CREDIT', 'Allowance', 1)"
+            )
+            close()
+        }
+
+        val appDb = openAppDatabase()
+        try {
+            assertEquals(null, appDb.transactionDao().getTransactionsForKidOnce("Maya").single().recurringId)
+            val recurring = appDb.recurringDao()
+            assertEquals(emptyList<RecurringEntry>(), recurring.getAllRecurringOnce())
+            val id = recurring.upsertRecurring(
+                RecurringEntry(
+                    kidName = "Maya", title = "Allowance", amountCents = 500, type = TransactionType.CREDIT,
+                    category = "Allowance", frequency = Frequency.MONTHLY, startTimestamp = 1
+                )
+            )
+            assertEquals(Frequency.MONTHLY, recurring.getRecurring(id)?.frequency)
         } finally {
             appDb.close()
         }

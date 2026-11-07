@@ -8,8 +8,10 @@ import com.vivificavit.shortstack.R
 import com.vivificavit.shortstack.data.local.CategorySum
 import com.vivificavit.shortstack.data.local.SelectedKidStore
 import com.vivificavit.shortstack.data.model.DefaultCategories
+import com.vivificavit.shortstack.data.model.Frequency
 import com.vivificavit.shortstack.data.model.Goal
 import com.vivificavit.shortstack.data.model.GoalSplit
+import com.vivificavit.shortstack.data.model.RecurringEntry
 import com.vivificavit.shortstack.data.model.Transaction
 import com.vivificavit.shortstack.data.model.TransactionType
 import com.vivificavit.shortstack.repository.TransactionRepository
@@ -211,6 +213,16 @@ class TrackerViewModel(
             initialValue = null
         )
 
+    /** The selected kid's repeating entries, oldest first. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val recurring: StateFlow<List<RecurringEntry>> = _selectedKid
+        .flatMapLatest { kidName -> if (kidName == null) flowOf(emptyList()) else repository.getRecurringForKid(kidName) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
+        )
+
     /** The selected kid's goals; null until they have loaded. */
     val goals: StateFlow<GoalsState?> = kidMoney
         .map { it?.goals }
@@ -355,13 +367,32 @@ class TrackerViewModel(
         category: String,
         timestamp: Long = System.currentTimeMillis(),
         split: GoalSplit? = null,
-        coverGoalId: Long? = null
+        coverGoalId: Long? = null,
+        repeat: Frequency? = null
     ) {
         val trimmedCategory = category.trim()
         if (title.isBlank() || amountCents <= 0L || trimmedCategory.isBlank()) return
         val currentKid = _selectedKid.value ?: return
         showCategory(trimmedCategory)
         viewModelScope.launch {
+            if (repeat != null) {
+                // The schedule adds this first entry itself, along with any already due since its date.
+                val added = repository.addRecurring(
+                    RecurringEntry(
+                        kidName = currentKid,
+                        title = title.trim(),
+                        amountCents = amountCents,
+                        type = type,
+                        category = trimmedCategory,
+                        frequency = repeat,
+                        startTimestamp = timestamp,
+                        goalId = split?.goalId,
+                        goalCents = split?.amountCents
+                    )
+                )
+                if (added > 1) emitMessage(R.string.message_recurring_caught_up, added.toString(), title.trim())
+                return@launch
+            }
             val transaction = Transaction(
                 kidName = currentKid,
                 title = title.trim(),
@@ -371,6 +402,39 @@ class TrackerViewModel(
                 timestamp = timestamp
             )
             repository.insertTransaction(transaction, split, coverGoalId)
+        }
+    }
+
+    /** Adds every repeating entry that has come due. Runs whenever the app comes to the front. */
+    fun addDueRecurring() {
+        viewModelScope.launch {
+            repository.addDueRecurring().forEach { (entry, count) ->
+                if (count == 1) {
+                    emitMessage(R.string.message_recurring_added, entry.title, entry.kidName)
+                } else {
+                    emitMessage(R.string.message_recurring_caught_up, count.toString(), entry.title)
+                }
+            }
+        }
+    }
+
+    /** Saves changes to a repeating entry; they apply to the entries it adds from now on. */
+    fun updateRecurring(entry: RecurringEntry) {
+        showCategory(entry.category)
+        viewModelScope.launch { repository.saveRecurring(entry) }
+    }
+
+    /** Stops a repeating entry, keeping what it already added; the snackbar offers Undo. */
+    fun stopRecurring(entry: RecurringEntry) {
+        viewModelScope.launch {
+            val stopped = repository.deleteRecurring(entry)
+            _uiMessages.emit(
+                UiMessage(
+                    resId = R.string.message_recurring_stopped,
+                    args = listOf(entry.title),
+                    onUndo = { viewModelScope.launch { repository.restoreRecurring(stopped) } }
+                )
+            )
         }
     }
 
@@ -486,6 +550,8 @@ class TrackerViewModel(
             repository.importFromJson(openStream, replaceExisting = true)
                 .onSuccess { count ->
                     emitMessage(R.string.message_restore_succeeded, count.toString())
+                    // Repeating entries in the backup may have come due since it was made.
+                    addDueRecurring()
                 }
                 .onFailure { error ->
                     emitMessage(R.string.message_restore_failed, error.localizedMessage.orEmpty())
