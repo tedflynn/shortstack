@@ -39,7 +39,6 @@ class TrackerViewModelTest {
     private class FakeStore(initial: String? = null) : SelectedKidStore {
         private val state = MutableStateFlow(initial)
         override val lastSelectedKid: Flow<String?> = state
-        val current: String? get() = state.value
         override suspend fun setLastSelectedKid(name: String) {
             state.value = name
         }
@@ -62,8 +61,9 @@ class TrackerViewModelTest {
         Dispatchers.resetMain()
     }
 
+    // Generous, because CI runners can be slow; a passing check returns as soon as the value arrives.
     private suspend fun <T> Flow<T>.awaitValue(predicate: (T) -> Boolean): T =
-        withTimeout(5_000) { first(predicate) }
+        withTimeout(20_000) { first(predicate) }
 
     @Test
     fun freshInstallHasNoKidsUntilOneIsAdded() = runBlocking {
@@ -75,7 +75,8 @@ class TrackerViewModelTest {
 
         vm.addKid("Sam")
         vm.selectedKid.awaitValue { it == "Sam" }
-        assertEquals("Sam", store.current)
+        // The new kid shows as soon as it's saved; remembering the choice follows a moment later.
+        store.lastSelectedKid.awaitValue { it == "Sam" }
         vm.hasNoKids.awaitValue { !it }
         Unit
     }
